@@ -19,4 +19,4 @@ For a more detailed setup guide, please refer to lesson #1.
 
 ### Disclaimers:
 1. I’m not an expert in graphics programming. I’m writing this tutorial in the spirit of learning-by-teaching in the hope that it’ll be of help to others and ease their first steps in becoming Vulkan experts. If you spot errors or inaccuracies, please let me know so I can fix them and make this knowledge available to everyone.
-2. I’m standing on the shoulders of giants here. A lot of what I know about Vulkan programming I learned from the fantastic vulkan tutorial. I also got quite a bit out of looking at the vookoo library. So please check out these great projects and consider supporting the authors.
+2. I’m standing on the shoulders of giants here. A lot of what I know about Vulkan programming I learned from the fantastic [vulkan tutorial](https://vulkan-tutorial.com/). I also got quite a bit out of looking at the [vookoo library](https://github.com/andy-thomason/Vookoo). So please check out these great projects and consider supporting the authors.
