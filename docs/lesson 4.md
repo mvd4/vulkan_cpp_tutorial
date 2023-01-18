@@ -189,7 +189,7 @@ And with this helper function in place we can finally fill our `QueueCreateInfo`
 ``` 
 const auto queueFamilyIndex = get_suitable_queue_family(
     queueFamilies,
-    vk::QueueFlagBits::eCompute | vk::QueueFlagBits::eTransfer
+    vk::QueueFlagBits::eCompute
 );
 std::cout << "\nSelected queue family index: " << queueFamilyIndex << "\n";
 
@@ -202,8 +202,6 @@ const auto queueCreateInfos = std::vector< vk::DeviceQueueCreateInfo >{
 };
 ```
 I can hear you shouting at me now because I asked for a compute queue, not a graphics one. Yes, I know, most of you are reading this tutorial because they want to do graphics programming. And I promise, we'll get to that eventually. But setting up a graphics pipeline in Vulkan is a pretty complex task, so there's quite a way to go still. I therefore think it is better to focus on the simpler problem of getting compute pipeline running first. That will already teach us a lot of the concepts and fundamentals that we'll need in in any case. That way we can see some success and then build on what we've learned to get the graphics working.
-
-I also requested the `vk::QueueFlagBits::eTransfer` flag to be set. That capability is necessary to copy data to and from the GPU, so we won't be able to do much without it.
 
 Anyway: now that we have our `queueCreateInfos`, we're finally able to create our logical device.
 ```

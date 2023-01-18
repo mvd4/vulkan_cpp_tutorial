@@ -178,7 +178,7 @@ vk::UniqueDevice create_logical_device( const vk::PhysicalDevice& physicalDevice
 
     const auto queueFamilyIndex = get_suitable_queue_family(
         queueFamilies,
-        vk::QueueFlagBits::eCompute | vk::QueueFlagBits::eTransfer
+        vk::QueueFlagBits::eCompute
     );
     std::cout << "\nSelected queue family index: " << queueFamilyIndex << "\n";
 
