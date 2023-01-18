@@ -21,8 +21,53 @@ License.
 
 #include <iostream>
 
+struct version_number
+{
+    std::uint32_t major;
+    std::uint32_t minor;
+    std::uint32_t patch;
+};
+
+std::ostream& operator<<( std::ostream& os, const version_number& v )
+{
+    os << v.major << '.' << v.minor << '.' << v.patch;
+    return os;
+}
+
+constexpr bool operator >= ( const version_number& lhs, const version_number& rhs )
+{
+    if ( lhs.major != rhs.major )
+        return lhs.major > rhs.major;
+    if ( lhs.minor != rhs.minor )
+        return lhs.minor > rhs.minor;
+
+    return lhs.patch >= rhs.patch;
+}
+
+constexpr version_number get_vulkan_sdk_version()
+{
+    return version_number{
+        VK_API_VERSION_MAJOR(VK_HEADER_VERSION_COMPLETE ),
+        VK_API_VERSION_MINOR(VK_HEADER_VERSION_COMPLETE ),
+        VK_API_VERSION_PATCH(VK_HEADER_VERSION_COMPLETE )
+    };
+}
+
+constexpr bool is_macos()
+{
+    return
+#if defined __MACH__
+        true;
+#else
+        false;
+#endif
+}
+
+
 auto create_instance()
 {
+    std::cout << "Vulkan SDK Version: " << get_vulkan_sdk_version() << "\n";
+
     const auto appInfo = vk::ApplicationInfo{}
         .setPApplicationName( "Vulkan C++ Tutorial" )
         .setApplicationVersion( 1u )
@@ -30,8 +75,17 @@ auto create_instance()
         .setEngineVersion( 1u )
         .setApiVersion( VK_API_VERSION_1_1 );
 
-    const auto instanceCreateInfo = vk::InstanceCreateInfo{}
+    auto instanceCreateInfo = vk::InstanceCreateInfo{}
         .setPApplicationInfo( &appInfo );
+
+    // for newer versions of the sdk on macos we have to enable the portability extension
+    auto extensionsToEnable = std::vector< const char* >{};
+    if constexpr ( is_macos() && get_vulkan_sdk_version() >= version_number{ 1, 3, 216 } )
+    {
+        extensionsToEnable.push_back( VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME );
+        instanceCreateInfo.setPEnabledExtensionNames( extensionsToEnable );
+        instanceCreateInfo.setFlags( vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR );
+    }
 
     return vk::createInstanceUnique( instanceCreateInfo );
 }

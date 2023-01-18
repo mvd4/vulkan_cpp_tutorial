@@ -57,6 +57,10 @@ const auto instance = vk::createInstanceUnique( instanceCreateInfo );
 ```
 As described in lesson 2, we don't have to worry about the destruction of the instance - the UniqueWrapper will take care of that. Compile and run your program, it should run through without any error (without any console output too though). 
 
+> A note for those of you working on MacOS: with Vulkan SDK version 1.3.216 there has been a change that requires you to enable the portability subset extension explicitly. Failing to do so will yield an exception "Incompatible Driver".
+
+> We'll cover extensions in detail in one of the next lessons, but I've updated the code in the repository with a patch that allows you to run the app already now. For more information refer to [this article](https://stackoverflow.com/questions/72789012/why-does-vkcreateinstance-return-vk-error-incompatible-driver-on-macos-despite)
+
 Congratulations, the first step is done, you have successfully connected your application to Vulkan. We can now start to actually work with our GPUs.
 
 I'd like to make two minor improvements before we continue: First I'll wrap all the instance creation code in a utility function:
