@@ -138,12 +138,72 @@ vk::PhysicalDevice create_physical_device( const vk::Instance& instance )
     return physicalDevice;
 }
 
+void print_queue_family_properties( const vk::QueueFamilyProperties& props, unsigned index )
+{
+    std::cout <<
+        "\n    Queue Family " << index << ":\n" <<
+        "\n        queue count: " << props.queueCount <<
+        "\n        supports graphics operations: " << ( props.queueFlags & vk::QueueFlagBits::eGraphics ? "yes" : "no" ) <<
+        "\n        supports compute operations: " << ( props.queueFlags & vk::QueueFlagBits::eCompute ? "yes" : "no" ) <<
+        "\n        supports transfer operations: " << ( props.queueFlags & vk::QueueFlagBits::eTransfer ? "yes" : "no" ) <<
+        "\n        supports sparse binding operations: " << ( props.queueFlags & vk::QueueFlagBits::eSparseBinding ? "yes" : "no" ) <<
+        "\n";
+}
+
+std::uint32_t get_suitable_queue_family(
+    const std::vector< vk::QueueFamilyProperties >& queueFamilies,
+    vk::QueueFlags requiredFlags
+)
+{
+    std::uint32_t index = 0;
+    for ( const auto& q : queueFamilies )
+    {
+        if ( ( q.queueFlags & requiredFlags ) == requiredFlags )
+            return index;
+        ++index;
+    }
+    throw std::runtime_error( "No suitable queue family found" );
+}
+
+vk::UniqueDevice create_logical_device( const vk::PhysicalDevice& physicalDevice )
+{
+    const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
+    std::cout << "\nAvailable queue families:\n";
+    unsigned familyIndex = 0;
+    for ( const auto& qf : queueFamilies )
+    {
+        print_queue_family_properties( qf, familyIndex );
+        ++familyIndex;
+    }
+
+    const auto queueFamilyIndex = get_suitable_queue_family(
+        queueFamilies,
+        vk::QueueFlagBits::eCompute | vk::QueueFlagBits::eTransfer
+    );
+    std::cout << "\nSelected queue family index: " << queueFamilyIndex << "\n";
+
+    const auto queuePriority = 1.f;
+    const auto queueCreateInfos = std::vector< vk::DeviceQueueCreateInfo >{
+        vk::DeviceQueueCreateInfo{}
+            .setQueueFamilyIndex( queueFamilyIndex )
+            .setQueueCount( 1 )
+            .setQueuePriorities( queuePriority )
+    };
+
+    const auto deviceCreateInfo = vk::DeviceCreateInfo{}
+        .setQueueCreateInfos( queueCreateInfos );
+
+    return physicalDevice.createDeviceUnique( deviceCreateInfo );
+}
+
+
 int main()
 {
     try
     {
         const auto instance = create_instance();
-        const auto physicalDevices = create_physical_device( *instance );
+        const auto physicalDevice = create_physical_device( *instance );
+        const auto logicalDevice = create_logical_device( physicalDevice );
     }
     catch( const std::exception& e )
     {
