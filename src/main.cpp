@@ -19,7 +19,82 @@ License.
 
 #include <vulkan/vulkan.hpp>
 
+#include <iostream>
+
+auto create_instance()
+{
+    const auto appInfo = vk::ApplicationInfo{}
+        .setPApplicationName( "Vulkan C++ Tutorial" )
+        .setApplicationVersion( 1u )
+        .setPEngineName( "Vulkan C++ Tutorial Engine" )
+        .setEngineVersion( 1u )
+        .setApiVersion( VK_API_VERSION_1_1 );
+
+    const auto instanceCreateInfo = vk::InstanceCreateInfo{}
+        .setPApplicationInfo( &appInfo );
+
+    return vk::createInstanceUnique( instanceCreateInfo );
+}
+
+void print_physical_device_properties( const vk::PhysicalDevice& device )
+{
+    const auto props = device.getProperties();
+    const auto features = device.getFeatures();
+
+    std::cout <<
+        "    " << props.deviceName << ":" <<
+        "\n      is discrete GPU: " << ( props.deviceType == vk::PhysicalDeviceType::eDiscreteGpu ? "yes, " : "no, " ) <<
+        "\n      has geometry shader: " << ( features.geometryShader ? "yes, " : "no, " ) <<
+        "\n      has tesselation shader: " << ( features.tessellationShader ? "yes, " : "no, " ) <<
+        "\n      supports anisotropic filtering: " << ( features.samplerAnisotropy ? "yes, " : "no, ") <<
+        "\n";
+}
+
+vk::PhysicalDevice select_physical_device( const std::vector< vk::PhysicalDevice >& devices )
+{
+    size_t bestDeviceIndex = 0;
+    size_t index = 0;
+    for ( const auto& d : devices )
+    {
+        const auto props = d.getProperties();
+        const auto features = d.getFeatures();
+
+        const auto isDiscreteGPU = props.deviceType == vk::PhysicalDeviceType::eDiscreteGpu;
+        if ( isDiscreteGPU && bestDeviceIndex == 0 )
+            bestDeviceIndex = index;
+
+        ++index;
+    }
+
+    return devices[ bestDeviceIndex ];
+}
+
+vk::PhysicalDevice create_physical_device( const vk::Instance& instance )
+{
+    const auto physicalDevices = instance.enumeratePhysicalDevices();
+    if ( physicalDevices.empty() )
+        throw std::runtime_error( "No Vulkan devices found" );
+
+    std::cout << "Available physical devices:\n";
+    for ( const auto& d : physicalDevices )
+        print_physical_device_properties( d );
+
+    const auto physicalDevice = select_physical_device( physicalDevices );
+    std::cout << "\nSelected Device: " << physicalDevice.getProperties().deviceName << "\n";
+    return physicalDevice;
+}
+
 int main()
 {
+    try
+    {
+        const auto instance = create_instance();
+        const auto physicalDevices = create_physical_device( *instance );
+    }
+    catch( const std::exception& e )
+    {
+        std::cout << "Exception thrown: " << e.what() << "\n";
+        return -1;
+    }
     return 0;
 }
