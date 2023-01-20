@@ -64,9 +64,38 @@ constexpr bool is_macos()
 }
 
 
-auto create_instance()
+void print_layer_properties( const std::vector< vk::LayerProperties >& layers )
+{
+    for ( const auto& l : layers )
+    {
+        std::cout << "    " << l.layerName << "\n";
+        const auto extensions = vk::enumerateInstanceExtensionProperties( l.layerName.operator std::string() );
+        for ( const auto& e : extensions )
+            std::cout << "       Extension: " << e.extensionName << "\n";
+    }
+
+    std::cout << "\n";
+}
+
+void print_extension_properties( const std::vector< vk::ExtensionProperties >& extensions )
+{
+    for ( const auto& e : extensions )
+        std::cout << "    " << e.extensionName << "\n";
+
+    std::cout << "\n";
+}
+
+vk::UniqueInstance create_instance()
 {
     std::cout << "Vulkan SDK Version: " << get_vulkan_sdk_version() << "\n";
+
+    const auto layers = vk::enumerateInstanceLayerProperties();
+    std::cout << "Available instance layers: \n";
+    print_layer_properties( layers );
+
+    const auto instanceExtensions = vk::enumerateInstanceExtensionProperties();
+    std::cout << "Available instance extensions: \n";
+    print_extension_properties( instanceExtensions );
 
     const auto appInfo = vk::ApplicationInfo{}
         .setPApplicationName( "Vulkan C++ Tutorial" )
@@ -75,17 +104,28 @@ auto create_instance()
         .setEngineVersion( 1u )
         .setApiVersion( VK_API_VERSION_1_1 );
 
-    auto instanceCreateInfo = vk::InstanceCreateInfo{}
-        .setPApplicationInfo( &appInfo );
+    const auto layersToEnable = std::vector< const char* >{
+        "VK_LAYER_KHRONOS_validation"
+    };
+
+    auto extensionsToEnable = std::vector< const char* >{
+        VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME };
+
+    auto instanceCreateInfo = vk::InstanceCreateInfo{};
 
     // for newer versions of the sdk on macos we have to enable the portability extension
-    auto extensionsToEnable = std::vector< const char* >{};
     if constexpr ( is_macos() && get_vulkan_sdk_version() >= version_number{ 1, 3, 216 } )
     {
         extensionsToEnable.push_back( VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME );
-        instanceCreateInfo.setPEnabledExtensionNames( extensionsToEnable );
         instanceCreateInfo.setFlags( vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR );
     }
+
+    instanceCreateInfo
+        .setPApplicationInfo( &appInfo )
+        .setPEnabledLayerNames( layersToEnable )
+        .setPEnabledExtensionNames( extensionsToEnable );
 
     return vk::createInstanceUnique( instanceCreateInfo );
 }
@@ -96,12 +136,16 @@ void print_physical_device_properties( const vk::PhysicalDevice& device )
     const auto features = device.getFeatures();
 
     std::cout <<
-        "    " << props.deviceName << ":" <<
+        "  " << props.deviceName << ":" <<
         "\n      is discrete GPU: " << ( props.deviceType == vk::PhysicalDeviceType::eDiscreteGpu ? "yes, " : "no, " ) <<
         "\n      has geometry shader: " << ( features.geometryShader ? "yes, " : "no, " ) <<
         "\n      has tesselation shader: " << ( features.tessellationShader ? "yes, " : "no, " ) <<
         "\n      supports anisotropic filtering: " << ( features.samplerAnisotropy ? "yes, " : "no, ") <<
         "\n";
+
+    const auto deviceExtensions = device.enumerateDeviceExtensionProperties();
+    std::cout << "\n  Available device extensions: \n";
+    print_extension_properties( deviceExtensions );
 }
 
 vk::PhysicalDevice select_physical_device( const std::vector< vk::PhysicalDevice >& devices )
@@ -165,6 +209,28 @@ std::uint32_t get_suitable_queue_family(
     throw std::runtime_error( "No suitable queue family found" );
 }
 
+std::vector< const char* > get_required_device_extensions(
+    const std::vector< vk::ExtensionProperties >& availableExtensions
+)
+{
+    auto result = std::vector< const char* >{};
+
+    static const std::string compatibilityExtensionName = "VK_KHR_portability_subset";
+    const auto it = std::find_if(
+        availableExtensions.begin(),
+        availableExtensions.end(),
+        []( const vk::ExtensionProperties& e )
+        {
+            return compatibilityExtensionName == e.extensionName;
+        }
+    );
+
+    if ( it != availableExtensions.end() )
+        result.push_back( compatibilityExtensionName.c_str() );
+
+    return result;
+}
+
 vk::UniqueDevice create_logical_device( const vk::PhysicalDevice& physicalDevice )
 {
     const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
@@ -190,8 +256,12 @@ vk::UniqueDevice create_logical_device( const vk::PhysicalDevice& physicalDevice
             .setQueuePriorities( queuePriority )
     };
 
+    const auto enabledDeviceExtensions = get_required_device_extensions(
+        physicalDevice.enumerateDeviceExtensionProperties()
+    );
     const auto deviceCreateInfo = vk::DeviceCreateInfo{}
-        .setQueueCreateInfos( queueCreateInfos );
+        .setQueueCreateInfos( queueCreateInfos )
+        .setPEnabledExtensionNames( enabledDeviceExtensions );
 
     return physicalDevice.createDeviceUnique( deviceCreateInfo );
 }
