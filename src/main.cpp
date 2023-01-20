@@ -3,7 +3,7 @@
 mvd Vulkan C++ Tutorial
 
 
-Copyright 2021 mvd
+Copyright 2022 mvd
 
 This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of
 the MPL was not distributed with this file, You can obtain one at
@@ -62,6 +62,13 @@ constexpr bool is_macos()
         false;
 #endif
 }
+
+
+struct gpu_buffer
+{
+    vk::UniqueBuffer buffer;
+    vk::UniqueDeviceMemory memory;
+};
 
 
 void print_layer_properties( const std::vector< vk::LayerProperties >& layers )
@@ -266,6 +273,63 @@ vk::UniqueDevice create_logical_device( const vk::PhysicalDevice& physicalDevice
     return physicalDevice.createDeviceUnique( deviceCreateInfo );
 }
 
+std::uint32_t find_suitable_memory_index(
+    const vk::PhysicalDeviceMemoryProperties& memoryProperties,
+    std::uint32_t allowedTypesMask,
+    vk::MemoryPropertyFlags requiredMemoryFlags
+)
+{
+    for(
+        std::uint32_t memoryType = 1, i = 0;
+        i < memoryProperties.memoryTypeCount;
+        ++i, memoryType <<= 1
+    )
+    {
+        if(
+            ( allowedTypesMask & memoryType ) > 0 &&
+            ( ( memoryProperties.memoryTypes[i].propertyFlags & requiredMemoryFlags ) == requiredMemoryFlags )
+        )
+        {
+            return i;
+        }
+    }
+
+    throw std::runtime_error( "could not find suitable gpu memory" );
+}
+
+
+gpu_buffer create_gpu_buffer(
+    const vk::PhysicalDevice& physicalDevice,
+    const vk::Device& logicalDevice,
+    std::uint32_t size
+)
+{
+    const auto bufferCreateInfo = vk::BufferCreateInfo{}
+        .setSize( size )
+        .setUsage( vk::BufferUsageFlagBits::eStorageBuffer )
+        .setSharingMode( vk::SharingMode::eExclusive );
+    auto buffer = logicalDevice.createBufferUnique( bufferCreateInfo );
+
+    const auto memoryRequirements = logicalDevice.getBufferMemoryRequirements( *buffer );
+    const auto memoryProperties = physicalDevice.getMemoryProperties();
+    const auto requiredMemoryFlags =
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+
+    const auto memoryIndex = find_suitable_memory_index(
+        memoryProperties,
+        memoryRequirements.memoryTypeBits,
+        requiredMemoryFlags );
+
+    const auto allocateInfo = vk::MemoryAllocateInfo{}
+        .setAllocationSize( memoryRequirements.size )
+        .setMemoryTypeIndex( memoryIndex );
+
+    auto memory = logicalDevice.allocateMemoryUnique( allocateInfo );
+
+    logicalDevice.bindBufferMemory( *buffer, *memory, 0u );
+
+    return { std::move( buffer ), std::move( memory ) };
+}
 
 int main()
 {
@@ -274,6 +338,20 @@ int main()
         const auto instance = create_instance();
         const auto physicalDevice = create_physical_device( *instance );
         const auto logicalDevice = create_logical_device( physicalDevice );
+
+        constexpr size_t numElements = 500;
+        auto inputData = std::array< int, numElements >{};
+        int counter = 0;
+        std::generate( inputData.begin(), inputData.end(), [&counter]() { return counter++; } );
+
+        auto outputData = std::array< float, numElements >{};
+
+        const auto inputBuffer = create_gpu_buffer( physicalDevice, *logicalDevice, sizeof( inputData ) );
+        const auto outputBuffer = create_gpu_buffer( physicalDevice, *logicalDevice, sizeof( outputData ) );
+
+        const auto mappedInputMemory = logicalDevice->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
+        memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
+        logicalDevice->unmapMemory( *inputBuffer.memory );
     }
     catch( const std::exception& e )
     {
