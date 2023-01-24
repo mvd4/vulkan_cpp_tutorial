@@ -19,6 +19,8 @@ License.
 
 #include <vulkan/vulkan.hpp>
 
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 
 struct version_number
@@ -331,6 +333,27 @@ gpu_buffer create_gpu_buffer(
     return { std::move( buffer ), std::move( memory ) };
 }
 
+vk::UniqueShaderModule create_shader_module(
+    const vk::Device& logicalDevice,
+    const std::filesystem::path& path
+)
+{
+    std::ifstream is{ path, std::ios::binary };
+    if ( !is.is_open() )
+        throw std::runtime_error( "Could not open file" );
+
+    auto buffer = std::vector< std::uint32_t >{};
+    const auto bufferSizeInBytes = std::filesystem::file_size( path );
+    buffer.resize( std::filesystem::file_size( path ) / sizeof( std::uint32_t ) );
+
+    is.seekg( 0 );
+    is.read( reinterpret_cast< char* >( buffer.data() ), bufferSizeInBytes );
+
+    const auto createInfo = vk::ShaderModuleCreateInfo{}.setCode( buffer );
+    return logicalDevice.createShaderModuleUnique( createInfo );
+}
+
+
 int main()
 {
     try
@@ -352,6 +375,8 @@ int main()
         const auto mappedInputMemory = logicalDevice->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
         memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
         logicalDevice->unmapMemory( *inputBuffer.memory );
+
+        const auto computeShader = create_shader_module( *logicalDevice, "./shaders/compute.spv" );
     }
     catch( const std::exception& e )
     {

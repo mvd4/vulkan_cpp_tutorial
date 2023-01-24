@@ -2,6 +2,7 @@ cmake_minimum_required( VERSION 3.13 )
 
 set( PROJECT_NAME vulkan-cpp-tutorial )
 
+file( MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/bin/shaders" )
 
 add_executable( ${PROJECT_NAME} main.cpp )
 
@@ -16,3 +17,11 @@ target_link_directories( ${PROJECT_NAME} PRIVATE ${VULKAN_LIB_DIR} )
 target_link_libraries( ${PROJECT_NAME} ${Vulkan_LIBRARIES} )
 target_link_libraries( ${PROJECT_NAME} ${CONAN_LIBS} )
 
+add_dependencies( ${PROJECT_NAME} compute_shader )
+
+
+# shaders
+add_custom_target( compute_shader
+    COMMAND             "glslc" "${VULKAN_TUTORIAL_PROJECT_ROOT}/shaders/compute.comp" -o "shaders/compute.spv"
+    WORKING_DIRECTORY   "${CMAKE_BINARY_DIR}/bin"
+)
