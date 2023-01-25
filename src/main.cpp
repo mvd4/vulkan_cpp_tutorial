@@ -240,7 +240,15 @@ std::vector< const char* > get_required_device_extensions(
     return result;
 }
 
-vk::UniqueDevice create_logical_device( const vk::PhysicalDevice& physicalDevice )
+
+struct logical_device {
+    vk::UniqueDevice device;
+    std::uint32_t queueFamilyIndex;
+
+    operator const vk::Device&() const { return *device; }
+};
+
+logical_device create_logical_device( const vk::PhysicalDevice& physicalDevice )
 {
     const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
     std::cout << "\nAvailable queue families:\n";
@@ -272,7 +280,10 @@ vk::UniqueDevice create_logical_device( const vk::PhysicalDevice& physicalDevice
         .setQueueCreateInfos( queueCreateInfos )
         .setPEnabledExtensionNames( enabledDeviceExtensions );
 
-    return physicalDevice.createDeviceUnique( deviceCreateInfo );
+    return logical_device{
+        std::move( physicalDevice.createDeviceUnique( deviceCreateInfo ) ),
+        queueFamilyIndex
+    };
 }
 
 std::uint32_t find_suitable_memory_index(
@@ -373,16 +384,22 @@ vk::UniqueDescriptorSetLayout create_descriptor_set_layout( const vk::Device& lo
     return logicalDevice.createDescriptorSetLayoutUnique( descriptorSetLayoutCreateInfo );
 }
 
-vk::UniquePipeline create_compute_pipeline(
+vk::UniquePipelineLayout create_pipeline_layout(
     const vk::Device& logicalDevice,
-    const vk::DescriptorSetLayout& descriptorSetLayout,
-    const vk::ShaderModule& computeShader
+    const vk::DescriptorSetLayout& descriptorSetLayout
 )
 {
     const auto pipelineLayoutCreateInfo = vk::PipelineLayoutCreateInfo{}
         .setSetLayouts( descriptorSetLayout );
-    const auto pipelineLayout = logicalDevice.createPipelineLayoutUnique( pipelineLayoutCreateInfo );
+    return logicalDevice.createPipelineLayoutUnique( pipelineLayoutCreateInfo );
+}
 
+vk::UniquePipeline create_compute_pipeline(
+    const vk::Device& logicalDevice,
+    const vk::PipelineLayout& pipelineLayout,
+    const vk::ShaderModule& computeShader
+)
+{
     const auto pipelineCreateInfo = vk::ComputePipelineCreateInfo{}
         .setStage(
             vk::PipelineShaderStageCreateInfo{}
@@ -390,7 +407,7 @@ vk::UniquePipeline create_compute_pipeline(
                 .setPName( "main" )
                 .setModule( computeShader )
         )
-        .setLayout( *pipelineLayout );
+        .setLayout( pipelineLayout );
 
     return logicalDevice.createComputePipelineUnique( vk::PipelineCache{}, pipelineCreateInfo ).value;
 }
@@ -422,23 +439,24 @@ int main()
 
         auto outputData = std::array< float, numElements >{};
 
-        const auto inputBuffer = create_gpu_buffer( physicalDevice, *logicalDevice, sizeof( inputData ) );
-        const auto outputBuffer = create_gpu_buffer( physicalDevice, *logicalDevice, sizeof( outputData ) );
+        const auto inputBuffer = create_gpu_buffer( physicalDevice, logicalDevice, sizeof( inputData ) );
+        const auto outputBuffer = create_gpu_buffer( physicalDevice, logicalDevice, sizeof( outputData ) );
 
-        const auto mappedInputMemory = logicalDevice->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
+        const auto mappedInputMemory = logicalDevice.device->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
         memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
-        logicalDevice->unmapMemory( *inputBuffer.memory );
+        logicalDevice.device->unmapMemory( *inputBuffer.memory );
 
-        const auto computeShader = create_shader_module( *logicalDevice, "./shaders/compute.spv" );
+        const auto computeShader = create_shader_module( logicalDevice, "./shaders/compute.spv" );
 
-        const auto descriptorSetLayout = create_descriptor_set_layout( *logicalDevice );
-        const auto pipeline = create_compute_pipeline( *logicalDevice, *descriptorSetLayout, *computeShader );
+        const auto descriptorSetLayout = create_descriptor_set_layout( logicalDevice );
+        const auto pipelineLayout = create_pipeline_layout( logicalDevice, *descriptorSetLayout );
+        const auto pipeline = create_compute_pipeline( logicalDevice, *pipelineLayout, *computeShader );
 
-        const auto descriptorPool = create_descriptor_pool( *logicalDevice );
+        const auto descriptorPool = create_descriptor_pool( logicalDevice );
         const auto allocateInfo = vk::DescriptorSetAllocateInfo{}
             .setSetLayouts( *descriptorSetLayout )
             .setDescriptorPool( *descriptorPool );
-        const auto descriptorSets = logicalDevice->allocateDescriptorSets( allocateInfo );
+        const auto descriptorSets = logicalDevice.device->allocateDescriptorSets( allocateInfo );
 
         const auto bufferInfos = std::vector< vk::DescriptorBufferInfo >{
             vk::DescriptorBufferInfo{}
@@ -456,7 +474,23 @@ int main()
             .setDescriptorType( vk::DescriptorType::eStorageBuffer )
             .setBufferInfo( bufferInfos );
 
-        logicalDevice->updateDescriptorSets( writeDescriptorSet, {} );
+        logicalDevice.device->updateDescriptorSets( writeDescriptorSet, {} );
+
+        const auto commandPool = logicalDevice.device->createCommandPoolUnique(
+            vk::CommandPoolCreateInfo{}.setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
+        );
+
+        const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
+            .setCommandPool( *commandPool )
+            .setLevel( vk::CommandBufferLevel::ePrimary )
+            .setCommandBufferCount( 1 );
+        const auto commandBuffer = logicalDevice.device->allocateCommandBuffers( commandBufferAllocateInfo )[0];
+
+        const auto beginInfo = vk::CommandBufferBeginInfo{}
+            .setFlags( vk::CommandBufferUsageFlagBits::eOneTimeSubmit );
+        commandBuffer.begin( beginInfo );
+
+        commandBuffer.end();
     }
     catch( const std::exception& e )
     {
