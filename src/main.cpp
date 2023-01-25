@@ -395,6 +395,17 @@ vk::UniquePipeline create_compute_pipeline(
     return logicalDevice.createComputePipelineUnique( vk::PipelineCache{}, pipelineCreateInfo ).value;
 }
 
+vk::UniqueDescriptorPool create_descriptor_pool( const vk::Device& logicalDevice )
+{
+    const auto poolSize = vk::DescriptorPoolSize{}
+        .setType( vk::DescriptorType::eStorageBuffer )
+        .setDescriptorCount( 2 );
+    const auto poolCreateInfo = vk::DescriptorPoolCreateInfo{}
+        .setMaxSets( 1 )
+        .setPoolSizes( poolSize );
+    return logicalDevice.createDescriptorPoolUnique( poolCreateInfo );
+}
+
 
 int main()
 {
@@ -422,6 +433,30 @@ int main()
 
         const auto descriptorSetLayout = create_descriptor_set_layout( *logicalDevice );
         const auto pipeline = create_compute_pipeline( *logicalDevice, *descriptorSetLayout, *computeShader );
+
+        const auto descriptorPool = create_descriptor_pool( *logicalDevice );
+        const auto allocateInfo = vk::DescriptorSetAllocateInfo{}
+            .setSetLayouts( *descriptorSetLayout )
+            .setDescriptorPool( *descriptorPool );
+        const auto descriptorSets = logicalDevice->allocateDescriptorSets( allocateInfo );
+
+        const auto bufferInfos = std::vector< vk::DescriptorBufferInfo >{
+            vk::DescriptorBufferInfo{}
+                .setBuffer( *inputBuffer.buffer )
+                .setOffset( 0 )
+                .setRange( sizeof( inputData ) ),
+            vk::DescriptorBufferInfo{}
+                .setBuffer( *outputBuffer.buffer )
+                .setOffset( 0 )
+                .setRange( sizeof( outputData ) ),
+        };
+        const auto writeDescriptorSet = vk::WriteDescriptorSet{}
+            .setDstSet( descriptorSets[0] )
+            .setDstBinding( 0 )
+            .setDescriptorType( vk::DescriptorType::eStorageBuffer )
+            .setBufferInfo( bufferInfos );
+
+        logicalDevice->updateDescriptorSets( writeDescriptorSet, {} );
     }
     catch( const std::exception& e )
     {
