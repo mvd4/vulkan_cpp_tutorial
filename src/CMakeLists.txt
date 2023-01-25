@@ -6,6 +6,9 @@ file( MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/bin/shaders" )
 
 add_executable( ${PROJECT_NAME} main.cpp )
 
+# set debug working directory for MSVC
+set_property(TARGET ${PROJECT_NAME} PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/bin" )
+
 target_include_directories( ${PROJECT_NAME} PRIVATE ${VULKAN_TUTORIAL_PROJECT_ROOT}/src )
 target_include_directories( ${PROJECT_NAME} PRIVATE ${Vulkan_INCLUDE_DIRS} )
 
