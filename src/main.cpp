@@ -490,7 +490,31 @@ int main()
             .setFlags( vk::CommandBufferUsageFlagBits::eOneTimeSubmit );
         commandBuffer.begin( beginInfo );
 
+        commandBuffer.bindPipeline( vk::PipelineBindPoint::eCompute, *pipeline );
+        commandBuffer.bindDescriptorSets( vk::PipelineBindPoint::eCompute, *pipelineLayout, 0, descriptorSets, {} );
+        commandBuffer.dispatch( 8, 1, 1 );
+
         commandBuffer.end();
+
+        const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
+
+        const auto submitInfo = vk::SubmitInfo{}
+            .setCommandBuffers( commandBuffer );
+        queue.submit( submitInfo );
+
+        logicalDevice.device->waitIdle();
+
+
+        const auto mappedOutputMemory = logicalDevice.device->mapMemory( *outputBuffer.memory, 0, sizeof( outputData ) );
+        memcpy( outputData.data(), mappedOutputMemory, sizeof( outputData ) );
+        logicalDevice.device->unmapMemory( *outputBuffer.memory );
+
+        for( size_t i = 0; i < outputData.size(); ++i )
+        {
+            std::cout << outputData[i] << ";\t";
+            if ( ( i % 16 ) == 0 )
+                std::cout << "\n";
+        }
     }
     catch( const std::exception& e )
     {
