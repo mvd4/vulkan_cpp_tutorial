@@ -2,8 +2,17 @@
 
 layout( local_size_x = 64 ) in;
 
-int inputBuffer[512];
-float outputBuffer[512];
+
+layout( binding = 0 ) readonly buffer inputBufferLayout
+{
+    uint inputBuffer[];
+};
+
+layout( binding = 1 ) writeonly buffer outputBufferLayout
+{
+    float outputBuffer[];
+};
+
 
 void main() 
 {

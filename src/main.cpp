@@ -353,6 +353,48 @@ vk::UniqueShaderModule create_shader_module(
     return logicalDevice.createShaderModuleUnique( createInfo );
 }
 
+vk::UniqueDescriptorSetLayout create_descriptor_set_layout( const vk::Device& logicalDevice )
+{
+    const auto bindings = std::array< vk::DescriptorSetLayoutBinding, 2 >{
+        vk::DescriptorSetLayoutBinding{}
+            .setBinding( 0 )
+            .setStageFlags( vk::ShaderStageFlagBits::eCompute )
+            .setDescriptorType( vk::DescriptorType::eStorageBuffer )
+            .setDescriptorCount( 1 ),
+        vk::DescriptorSetLayoutBinding{}
+            .setBinding( 1 )
+            .setStageFlags( vk::ShaderStageFlagBits::eCompute )
+            .setDescriptorType( vk::DescriptorType::eStorageBuffer )
+            .setDescriptorCount( 1 ),
+    };
+    const auto descriptorSetLayoutCreateInfo = vk::DescriptorSetLayoutCreateInfo{}
+        .setBindings( bindings );
+
+    return logicalDevice.createDescriptorSetLayoutUnique( descriptorSetLayoutCreateInfo );
+}
+
+vk::UniquePipeline create_compute_pipeline(
+    const vk::Device& logicalDevice,
+    const vk::DescriptorSetLayout& descriptorSetLayout,
+    const vk::ShaderModule& computeShader
+)
+{
+    const auto pipelineLayoutCreateInfo = vk::PipelineLayoutCreateInfo{}
+        .setSetLayouts( descriptorSetLayout );
+    const auto pipelineLayout = logicalDevice.createPipelineLayoutUnique( pipelineLayoutCreateInfo );
+
+    const auto pipelineCreateInfo = vk::ComputePipelineCreateInfo{}
+        .setStage(
+            vk::PipelineShaderStageCreateInfo{}
+                .setStage( vk::ShaderStageFlagBits::eCompute )
+                .setPName( "main" )
+                .setModule( computeShader )
+        )
+        .setLayout( *pipelineLayout );
+
+    return logicalDevice.createComputePipelineUnique( vk::PipelineCache{}, pipelineCreateInfo ).value;
+}
+
 
 int main()
 {
@@ -377,6 +419,9 @@ int main()
         logicalDevice->unmapMemory( *inputBuffer.memory );
 
         const auto computeShader = create_shader_module( *logicalDevice, "./shaders/compute.spv" );
+
+        const auto descriptorSetLayout = create_descriptor_set_layout( *logicalDevice );
+        const auto pipeline = create_compute_pipeline( *logicalDevice, *descriptorSetLayout, *computeShader );
     }
     catch( const std::exception& e )
     {
