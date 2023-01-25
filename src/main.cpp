@@ -261,7 +261,7 @@ logical_device create_logical_device( const vk::PhysicalDevice& physicalDevice )
 
     const auto queueFamilyIndex = get_suitable_queue_family(
         queueFamilies,
-        vk::QueueFlagBits::eCompute
+        vk::QueueFlagBits::eCompute | vk::QueueFlagBits::eTransfer
     );
     std::cout << "\nSelected queue family index: " << queueFamilyIndex << "\n";
 
@@ -314,19 +314,20 @@ std::uint32_t find_suitable_memory_index(
 gpu_buffer create_gpu_buffer(
     const vk::PhysicalDevice& physicalDevice,
     const vk::Device& logicalDevice,
-    std::uint32_t size
+    std::uint32_t size,
+    vk::BufferUsageFlags usageFlags = vk::BufferUsageFlagBits::eStorageBuffer,
+    vk::MemoryPropertyFlags requiredMemoryFlags =
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
 )
 {
     const auto bufferCreateInfo = vk::BufferCreateInfo{}
         .setSize( size )
-        .setUsage( vk::BufferUsageFlagBits::eStorageBuffer )
+        .setUsage( usageFlags )
         .setSharingMode( vk::SharingMode::eExclusive );
     auto buffer = logicalDevice.createBufferUnique( bufferCreateInfo );
 
     const auto memoryRequirements = logicalDevice.getBufferMemoryRequirements( *buffer );
     const auto memoryProperties = physicalDevice.getMemoryProperties();
-    const auto requiredMemoryFlags =
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
 
     const auto memoryIndex = find_suitable_memory_index(
         memoryProperties,
@@ -439,12 +440,25 @@ int main()
 
         auto outputData = std::array< float, numElements >{};
 
-        const auto inputBuffer = create_gpu_buffer( physicalDevice, logicalDevice, sizeof( inputData ) );
+        const auto inputStagingBuffer = create_gpu_buffer(
+            physicalDevice,
+            logicalDevice,
+            sizeof( inputData ),
+            vk::BufferUsageFlagBits::eTransferSrc
+        );
+        const auto inputGPUBuffer = create_gpu_buffer(
+            physicalDevice,
+            logicalDevice,
+            sizeof( inputData ),
+            vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+
         const auto outputBuffer = create_gpu_buffer( physicalDevice, logicalDevice, sizeof( outputData ) );
 
-        const auto mappedInputMemory = logicalDevice.device->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
+        const auto mappedInputMemory = logicalDevice.device->mapMemory( *inputStagingBuffer.memory, 0, sizeof( inputData ) );
         memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
-        logicalDevice.device->unmapMemory( *inputBuffer.memory );
+        logicalDevice.device->unmapMemory( *inputStagingBuffer.memory );
 
         const auto computeShader = create_shader_module( logicalDevice, "./shaders/compute.spv" );
 
@@ -460,7 +474,7 @@ int main()
 
         const auto bufferInfos = std::vector< vk::DescriptorBufferInfo >{
             vk::DescriptorBufferInfo{}
-                .setBuffer( *inputBuffer.buffer )
+                .setBuffer( *inputGPUBuffer.buffer )
                 .setOffset( 0 )
                 .setRange( sizeof( inputData ) ),
             vk::DescriptorBufferInfo{}
@@ -492,6 +506,11 @@ int main()
 
         commandBuffer.bindPipeline( vk::PipelineBindPoint::eCompute, *pipeline );
         commandBuffer.bindDescriptorSets( vk::PipelineBindPoint::eCompute, *pipelineLayout, 0, descriptorSets, {} );
+        commandBuffer.copyBuffer(
+            *inputStagingBuffer.buffer,
+            *inputGPUBuffer.buffer,
+            vk::BufferCopy{}.setSize( sizeof( inputData ) )
+        );
         commandBuffer.dispatch( 8, 1, 1 );
 
         commandBuffer.end();
