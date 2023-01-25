@@ -12,6 +12,10 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CM
 target_include_directories( ${PROJECT_NAME} PRIVATE ${VULKAN_TUTORIAL_PROJECT_ROOT}/src )
 target_include_directories( ${PROJECT_NAME} PRIVATE ${Vulkan_INCLUDE_DIRS} )
 
+target_sources( ${PROJECT_NAME} PRIVATE devices.cpp  devices.hpp )
+target_sources( ${PROJECT_NAME} PRIVATE memory.cpp  memory.hpp )
+target_sources( ${PROJECT_NAME} PRIVATE pipelines.cpp  pipelines.hpp )
+
 cmake_policy( SET CMP0076 NEW )
 
 target_link_directories( ${PROJECT_NAME} PRIVATE ${VULKAN_TUTORIAL_PROJECT_ROOT}/build/lib )
