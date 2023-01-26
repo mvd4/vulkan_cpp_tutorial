@@ -13,6 +13,7 @@ target_include_directories( ${PROJECT_NAME} PRIVATE ${VULKAN_TUTORIAL_PROJECT_RO
 target_include_directories( ${PROJECT_NAME} PRIVATE ${Vulkan_INCLUDE_DIRS} )
 
 target_sources( ${PROJECT_NAME} PRIVATE devices.cpp  devices.hpp )
+target_sources( ${PROJECT_NAME} PRIVATE glfw_utils.cpp  glfw_utils.hpp )
 target_sources( ${PROJECT_NAME} PRIVATE memory.cpp  memory.hpp )
 target_sources( ${PROJECT_NAME} PRIVATE pipelines.cpp  pipelines.hpp )
 

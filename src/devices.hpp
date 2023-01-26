@@ -35,7 +35,7 @@ namespace vcpp
 
     void print_extension_properties( const std::vector< vk::ExtensionProperties >& extensions );
 
-    vk::UniqueInstance create_instance();
+    vk::UniqueInstance create_instance( const std::vector< std::string >& requiredExtensions = {} );
 
     void print_physical_device_properties( const vk::PhysicalDevice& device );
 
@@ -54,5 +54,8 @@ namespace vcpp
         const std::vector< vk::ExtensionProperties >& availableExtensions
     );
 
-    logical_device create_logical_device( const vk::PhysicalDevice& physicalDevice );
+    logical_device create_logical_device(
+        const vk::PhysicalDevice& physicalDevice,
+        const vk::QueueFlags requiredFlags
+    );
 }

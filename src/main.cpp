@@ -18,6 +18,7 @@ License.
 ***************************************************************************************************/
 
 #include "devices.hpp"
+#include "glfw_utils.hpp"
 #include "memory.hpp"
 #include "pipelines.hpp"
 
@@ -31,9 +32,22 @@ int main()
 {
     try
     {
-        const auto instance = vcpp::create_instance();
+        const auto glfw = vcpp::glfw_instance{};
+        const auto window = vcpp::create_window( 800, 600, "Vulkan C++ Tutorial" );
+
+        const auto instance = vcpp::create_instance( vcpp::get_required_extensions_for_glfw() );
+        const auto surface = vcpp::create_surface( *instance, *window );
+
         const auto physicalDevice = vcpp::create_physical_device( *instance );
-        const auto logicalDevice = vcpp::create_logical_device( physicalDevice );
+        const auto logicalDevice = vcpp::create_logical_device(
+            physicalDevice,
+            vk::QueueFlagBits::eGraphics );
+
+
+        while ( !glfwWindowShouldClose( window.get() ) )
+        {
+            glfwPollEvents();
+        }
     }
     catch( const std::exception& e )
     {

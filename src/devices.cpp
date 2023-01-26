@@ -88,7 +88,7 @@ namespace vcpp
         std::cout << "\n";
     }
 
-    vk::UniqueInstance create_instance()
+    vk::UniqueInstance create_instance( const std::vector< std::string >& requiredExtensions )
     {
         std::cout << "Vulkan SDK Version: " << get_vulkan_sdk_version() << "\n";
 
@@ -115,6 +115,9 @@ namespace vcpp
             VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
             VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
             VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME };
+
+        for ( const auto& e : requiredExtensions )
+            extensionsToEnable.push_back( e.c_str() );
 
         auto instanceCreateInfo = vk::InstanceCreateInfo{};
 
@@ -235,7 +238,10 @@ namespace vcpp
     }
 
 
-    logical_device create_logical_device( const vk::PhysicalDevice& physicalDevice )
+    logical_device create_logical_device(
+        const vk::PhysicalDevice& physicalDevice,
+        const vk::QueueFlags requiredFlags
+    )
     {
         const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
         std::cout << "\nAvailable queue families:\n";
@@ -248,7 +254,7 @@ namespace vcpp
 
         const auto queueFamilyIndex = get_suitable_queue_family(
             queueFamilies,
-            vk::QueueFlagBits::eCompute | vk::QueueFlagBits::eTransfer
+            requiredFlags
         );
         std::cout << "\nSelected queue family index: " << queueFamilyIndex << "\n";
 
