@@ -186,7 +186,7 @@ vk::UniqueSurfaceKHR create_surface(
     return vk::UniqueSurfaceKHR{ vk::SurfaceKHR( surface ), deleter };    
 }
 ```
-For correctness we should create the surface before the logical device, because the selection of the appropriate physical device and queue may actually depend on the surface(5). We therefore call our new function right after creating the instance:
+We need to create the surface before the logical device, because the selection of the appropriate physical device and queue may actually depend on the surface. We therefore call our new function right after creating the instance:
 ```
 int main()
 {
@@ -198,6 +198,66 @@ int main()
         const auto instance = vcpp::create_instance();
         const auto surface = vcpp::create_surface( *instance, *window );
         ...
+```
+And in this case we cannot simply assume that the graphics queue will support presenting to our surface (although it probably will), because without calling the appropriate function
+```
+class PhysicalDevice
+{
+    ...
+    Bool32 getSurfaceSupportKHR( uint32_t queueFamilyIndex, SurfaceKHR surface, ... );
+    ...
+}
+```
+... we'll later be unable to connect our graphics pipeline to the surface. Therefore let's modify our queue selection function(5):
+```
+std::uint32_t get_suitable_queue_family(
+    const vk::PhysicalDevice& physicalDevice,
+    vk::QueueFlags requiredFlags,
+    std::optional< const vk::SurfaceKHR > surface
+)
+{
+    const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
+
+    std::uint32_t index = 0;
+    for ( const auto& q : queueFamilies )
+    {
+        if (
+            surface.has_value() &&
+            !physicalDevice.getSurfaceSupportKHR( index, *surface )
+        )
+        {
+            continue;
+        }
+
+        if ( ( q.queueFlags & requiredFlags ) == requiredFlags )
+            return index;
+        ++index;
+    }
+    throw std::runtime_error( "No suitable queue family found" );
+}
+```
+We use an optional to pass in the surface because our queue selection should also continue to work if we want to create e.g a compute queue. We then filter out all queues that don't support presentation to our surface Obviously we also need to modify our logical device creation:
+```
+logical_device create_logical_device(
+    const vk::PhysicalDevice& physicalDevice,
+    const vk::QueueFlags requiredFlags,
+    std::optional< const vk::SurfaceKHR > surface
+)
+{
+    ...
+    const auto queueFamilyIndex = get_suitable_queue_family(
+        physicalDevice,
+        requiredFlags,
+        surface );
+    ...
+}
+```
+... and the call in `main`:
+```
+const auto logicalDevice = vcpp::create_logical_device(
+    physicalDevice,
+    vk::QueueFlagBits::eGraphics,
+    *surface );
 ```
 
 However, if you run the program now you will get an exception because the surface creation failed. Looking up the error code that is returned from the GLFW function yields the constant `VK_ERROR_NATIVE_WINDOW_IN_USE_KHR`. How can that be? I mean we just created the window and definitely didn't use it yet.
@@ -218,4 +278,4 @@ That's it for today. We've covered quite a bit of ground and are now well prepar
 2. In fact, you can absolutely use Vulkan's graphics capabilities without ever rendering anything to a window / screen, e.g. if you just want to render stuff on a server and then save it to a file without displaying it anywhere.
 3. A note here: in many tutorials you will see people wrap GLFW initialization, window-creation, application run-loop and more in one big class. I am personally not a fan of this approach as this quickly leads to a loss of flexibility and clarity and has negative effects on modularity and testability of the code. So I keep my classes as small as possible until I see a clear benefit in making them larger. As far as I can tell this also corresponds to a general move to more functional patterns in C++ and other languages.
 4. A `vector< const char* >` would have done as well here as the pointers point to static strings within GLFW. But it's never a good idea to rely on implementation details, especially not in code that you don't control. Therefore I'll rather accept the small overhead of creating strings here - the function is probably not going to be called more than once anyway.
-5. Theoretically it is possible that the queue we selected does not support drawing to a surface (aka 'presenting' in Vulkan lingo). I have personally never encountered that and will therefore ignore this possibility to not make the tutorial more complicated than necessary. If you really find yourself in this situation, please drop me a message and I'll update this lesson to handle that scenario as well.
+5. Yes, we now call `getQueueFamilyProperties` twice. Nevertheless I think that's the cleanest option because actually the log output probably shouldn't be part of a production version of `create_logical_device`. So we wouldn't need the queue properties in there anymore. It also seems weird to pass the physical device and also a property vector that can directly be obtained by the physical device to the same function as parameters.

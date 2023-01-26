@@ -201,13 +201,24 @@ namespace vcpp
     }
 
     std::uint32_t get_suitable_queue_family(
-        const std::vector< vk::QueueFamilyProperties >& queueFamilies,
-        vk::QueueFlags requiredFlags
-    )
-    {
-        std::uint32_t index = 0;
-        for ( const auto& q : queueFamilies )
-        {
+        const vk::PhysicalDevice& physicalDevice,
+        vk::QueueFlags requiredFlags,
+        std::optional< const vk::SurfaceKHR > surface
+     )
+     {
+        const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
+
+         std::uint32_t index = 0;
+         for ( const auto& q : queueFamilies )
+         {
+            if (
+                surface.has_value() &&
+                !physicalDevice.getSurfaceSupportKHR( index, *surface )
+            )
+            {
+                continue;
+            }
+
             if ( ( q.queueFlags & requiredFlags ) == requiredFlags )
                 return index;
             ++index;
@@ -240,7 +251,8 @@ namespace vcpp
 
     logical_device create_logical_device(
         const vk::PhysicalDevice& physicalDevice,
-        const vk::QueueFlags requiredFlags
+        const vk::QueueFlags requiredFlags,
+        std::optional< const vk::SurfaceKHR > surface
     )
     {
         const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
@@ -253,9 +265,9 @@ namespace vcpp
         }
 
         const auto queueFamilyIndex = get_suitable_queue_family(
-            queueFamilies,
-            requiredFlags
-        );
+            physicalDevice,
+            requiredFlags,
+            surface );
         std::cout << "\nSelected queue family index: " << queueFamilyIndex << "\n";
 
         const auto queuePriority = 1.f;

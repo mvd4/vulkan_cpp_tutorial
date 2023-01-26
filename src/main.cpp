@@ -41,7 +41,8 @@ int main()
         const auto physicalDevice = vcpp::create_physical_device( *instance );
         const auto logicalDevice = vcpp::create_logical_device(
             physicalDevice,
-            vk::QueueFlagBits::eGraphics );
+            vk::QueueFlagBits::eGraphics,
+            *surface );
 
 
         while ( !glfwWindowShouldClose( window.get() ) )

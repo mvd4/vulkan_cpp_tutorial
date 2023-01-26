@@ -21,6 +21,8 @@ License.
 
 #include <vulkan/vulkan.hpp>
 
+#include <optional>
+
 
 namespace vcpp
 {
@@ -46,8 +48,9 @@ namespace vcpp
     void print_queue_family_properties( const vk::QueueFamilyProperties& props, unsigned index );
 
     std::uint32_t get_suitable_queue_family(
-        const std::vector< vk::QueueFamilyProperties >& queueFamilies,
-        vk::QueueFlags requiredFlags
+        const vk::PhysicalDevice& physicalDevice,
+        vk::QueueFlags requiredFlags,
+        std::optional< const vk::SurfaceKHR > surface
     );
 
     std::vector< const char* > get_required_device_extensions(
@@ -56,6 +59,7 @@ namespace vcpp
 
     logical_device create_logical_device(
         const vk::PhysicalDevice& physicalDevice,
-        const vk::QueueFlags requiredFlags
+        const vk::QueueFlags requiredFlags,
+        std::optional< const vk::SurfaceKHR > surface
     );
 }
