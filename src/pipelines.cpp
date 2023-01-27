@@ -104,10 +104,42 @@ namespace vcpp
     }
 
 
+    vk::UniqueRenderPass create_render_pass(
+        const vk::Device& logicalDevice,
+        const vk::Format& colorFormat
+    )
+    {
+        const auto colorAttachment = vk::AttachmentDescription{}
+            .setFormat( colorFormat )
+            .setSamples( vk::SampleCountFlagBits::e1 )
+            .setLoadOp( vk::AttachmentLoadOp::eClear )
+            .setStoreOp( vk::AttachmentStoreOp::eStore )
+            .setStencilLoadOp( vk::AttachmentLoadOp::eDontCare )
+            .setStencilStoreOp( vk::AttachmentStoreOp::eDontCare )
+            .setInitialLayout( vk::ImageLayout::eUndefined )
+            .setFinalLayout( vk::ImageLayout::ePresentSrcKHR );
+
+        const auto colorAttachmentRef = vk::AttachmentReference{}
+             .setAttachment( 0 )
+             .setLayout( vk::ImageLayout::eColorAttachmentOptimal );
+
+        const auto subpass = vk::SubpassDescription{}
+            .setPipelineBindPoint( vk::PipelineBindPoint::eGraphics )
+            .setColorAttachments( colorAttachmentRef );
+
+        const auto renderPassCreateInfo = vk::RenderPassCreateInfo{}
+            .setAttachments( colorAttachment )
+            .setSubpasses( subpass );
+
+        return logicalDevice.createRenderPassUnique( renderPassCreateInfo );
+    }
+
+
     vk::UniquePipeline create_graphics_pipeline(
         const vk::Device& logicalDevice,
         const vk::ShaderModule& vertexShader,
         const vk::ShaderModule& fragmentShader,
+        const vk::RenderPass& renderPass,
         const vk::Extent2D& viewportExtent
     )
     {
@@ -159,6 +191,8 @@ namespace vcpp
         const auto colorBlendState = vk::PipelineColorBlendStateCreateInfo{}
             .setAttachments( colorBlendAttachment );
 
+        const auto pipelineLayout = logicalDevice.createPipelineLayoutUnique( vk::PipelineLayoutCreateInfo{} );
+
         const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
             .setStages( shaderStageInfos )
             .setPVertexInputState( &vertexInputState )
@@ -166,7 +200,9 @@ namespace vcpp
             .setPViewportState( &viewportState )
             .setPRasterizationState( &rasterizationState )
             .setPMultisampleState( &multisampleState )
-            .setPColorBlendState( &colorBlendState );
+            .setPColorBlendState( &colorBlendState )
+            .setLayout( *pipelineLayout )
+            .setRenderPass( renderPass );
 
         return logicalDevice.createGraphicsPipelineUnique( vk::PipelineCache{}, pipelineCreateInfo ).value;
     }

@@ -48,10 +48,14 @@ int main()
         const auto vertexShader = create_shader_module( logicalDevice, "./shaders/vertex.spv" );
         const auto fragmentShader = create_shader_module( logicalDevice, "./shaders/fragment.spv" );
 
+        const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR( *surface );
+        const auto renderPass = vcpp::create_render_pass( logicalDevice, surfaceFormats[0].format );
+
         const auto pipeline = create_graphics_pipeline(
             logicalDevice,
             *vertexShader,
             *fragmentShader,
+            *renderPass,
             vk::Extent2D{ windowWidth, windowHeight } );
 
         while ( !glfwWindowShouldClose( window.get() ) )

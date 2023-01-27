@@ -45,10 +45,16 @@ namespace vcpp
 
     vk::UniqueDescriptorPool create_descriptor_pool( const vk::Device& logicalDevice );
 
+    vk::UniqueRenderPass create_render_pass(
+        const vk::Device& logicalDevice,
+        const vk::Format& colorFormat
+    );
+
     vk::UniquePipeline create_graphics_pipeline(
         const vk::Device& logicalDevice,
         const vk::ShaderModule& vertexShader,
         const vk::ShaderModule& fragmentShader,
+        const vk::RenderPass& renderPass,
         const vk::Extent2D& viewportExtent
     );
 
