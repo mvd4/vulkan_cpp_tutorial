@@ -31,7 +31,7 @@ int main()
 {
     constexpr int windowWidth = 800;
     constexpr int windowHeight = 600;
-    constexpr uint32_t swapchainImageCount = 2u;
+    constexpr uint32_t requestedSwapchainImageCount = 2u;
 
     try
     {
@@ -67,7 +67,19 @@ int main()
             *surface,
             surfaceFormats[0],
             swapchainExtent,
-            swapchainImageCount );
+            requestedSwapchainImageCount );
+
+        const auto imageViews = vcpp::create_swapchain_image_views(
+            logicalDevice,
+            *swapchain,
+            surfaceFormats[0].format );
+
+        const auto framebuffers = create_framebuffers(
+            logicalDevice,
+            imageViews,
+            swapchainExtent,
+            *renderPass
+        );
 
         while ( !glfwWindowShouldClose( window.get() ) )
         {

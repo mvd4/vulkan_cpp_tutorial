@@ -46,4 +46,72 @@ namespace vcpp
         
         return logicalDevice.createSwapchainKHRUnique( createInfo );
     }
+
+
+    vk::UniqueImageView create_image_view(
+        const vk::Device& logicalDevice,
+        const vk::Image& image,
+        const vk::Format& format
+    )
+    {
+        const auto subresourceRange = vk::ImageSubresourceRange{}
+            .setAspectMask( vk::ImageAspectFlagBits::eColor )
+            .setBaseMipLevel( 0 )
+            .setLevelCount( 1 )
+            .setBaseArrayLayer( 0 )
+            .setLayerCount( 1 );
+
+        const auto createInfo = vk::ImageViewCreateInfo{}
+            .setImage( image )
+            .setViewType( vk::ImageViewType::e2D )
+            .setFormat( format )
+            .setSubresourceRange( subresourceRange );
+
+        return logicalDevice.createImageViewUnique( createInfo );
+    }
+
+
+    std::vector< vk::UniqueImageView > create_swapchain_image_views(
+        const vk::Device& logicalDevice,
+        const vk::SwapchainKHR& swapChain,
+        const vk::Format& imageFormat
+    )
+    {
+        auto swapChainImages = logicalDevice.getSwapchainImagesKHR( swapChain );
+
+        std::vector< vk::UniqueImageView > swapChainImageViews;
+        for( const auto img : swapChainImages )
+        {
+            swapChainImageViews.push_back(
+                create_image_view( logicalDevice, img, imageFormat )
+            );
+        }
+
+        return swapChainImageViews;
+    }
+
+
+    std::vector< vk::UniqueFramebuffer > create_framebuffers(
+        const vk::Device& logicalDevice,
+        const std::vector< vk::UniqueImageView >& imageViews,
+        const vk::Extent2D& imageExtent,
+        const vk::RenderPass& renderPass
+    )
+    {
+        std::vector< vk::UniqueFramebuffer > result;
+        for( const auto& v : imageViews )
+        {
+            std::array< vk::ImageView, 1 > attachments = { *v };
+            const auto frameBufferCreateInfo = vk::FramebufferCreateInfo{}
+                .setRenderPass( renderPass )
+                .setAttachments( attachments )
+                .setWidth( imageExtent.width )
+                .setHeight( imageExtent.height )
+                .setLayers( 1 );
+
+            result.push_back( logicalDevice.createFramebufferUnique( frameBufferCreateInfo ) );
+        }
+
+        return result;
+    }
 }
