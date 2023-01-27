@@ -8,7 +8,7 @@ Like the compute pipeline, the graphics pipeline takes some input data, processe
 
 So let's look at the logical structure of a Vulkan graphics pipeline:
 
-[diagram]
+![Diagram of the different stages in a Vulkan graphics pipeline and the data flow through the pipeline](images/graphics_pipeline_1.png "Fig. 1: The logical structure of the graphics pipeline as we will create it")
 
 The main input to the graphics pipeline is a collection of so-called vertices(1) that are stored in a specific type of buffer. Technically speaking, a vertex is just a tuple of values that don't have any predefined meaning. In practice however it is almost always the coordinates of a point in 3D space plus associated attributes such as e.g. it's color, the corresponding texture index and so on. These vertices are the corners of all the primitives that make up the 3D world we want to render.
 
@@ -18,7 +18,7 @@ Next in line is the _Vertex Shader Stage_. This is one of the programmable stage
 
 _Tesselation and Geometry Stages_ are also programmable, but they are optional and we won't be using them for now. I therefore won't go into details here. Suffice it to say that they can be used to let the GPU create additional vertices to add geometry to the scene and improve the level of detail.
 
-The _Primitive Assembly_ is a fixed stage that takes the processed (and - if we have tesselation and / or geometry shaders - generated ) vertices and groups them into primitives by using the information from the input assembly stage. Without this step, the next stage would not be able to do its job as it would still only see individual vertices and couldn't process primitives as a whole. The primitive assembly stage is also the one that applies the viewport transformation, i.e. it transforms vertices from 3D world coordinates into 2D coordinates.
+The _Primitive Assembly_ is a fixed stage that takes the processed (and - if we have tesselation and / or geometry shaders - generated ) vertices and groups them into primitives by using the information from the input assembly stage. Without this step, the next stage would not be able to do its job as it would still only see individual vertices and couldn't process primitives as a whole. The primitive assembly stage is also the one that applies the viewport transformation, i.e. it transforms vertices from normalized 3D device coordinates into 2D image coordinates.
 
 _Rasterization_ is another fixed stage whose main job it is to transform the logical representation of a primitive (up to now those are still defined by their vertices) into a collection of so-called fragments that are interpolated between the vertices and make up the actual visual shape on your screen(2). The rasterization stage is also responsible for operations like back-face culling and depth clamping (more on those later), and to determine whether the geometry ultimately is drawn as points, lines or filled shapes.
 
@@ -72,7 +72,7 @@ At first sight that seems quite a lot of stuff to configure. But compare this in
 - since we won't use tesselation, `setPTesselationState` is not of any interest for us right now
 - `pViewportState_` specifies the configurable part of the primitive assembly stage. As described above, this is controlling how 3D world coordinates are converted into 2D framebuffer coordinates.
 - `pRasterizationState_` is hopefully self-explanatory again
-- multisampling is a technique to improve the visual quality, especially of edges, by computing multiple fragments per screen pixel and then outputting an average. We'll definitely look at this later in this series, but for now we can ignore `setPMultisampleState`
+- multisampling is a technique to improve the visual quality, especially of edges, by computing multiple fragments per screen pixel and then outputting an average. We won't be using this feature until later in this series, however, Vulkan requires us to define and set a `pMultisampleState_`.
 - we also won't need `pDepthStencilState_` for now as we're only going to draw a single triangle initially and therefore don't have to deal with depth testing yet
 - `pColorBlendState_` is important again but should be conceptually clear as well
 - in general pipelines in Vulkan are fixed, which means that you cannot change them after creation. That has a lot of advantages for the drivers ability to optimize the pipeline performance. But the flip-side of that is that you have to re-create the pipeline every time parts of the configuration change. That would be very wasteful in a scenario where such changes happen frequently. Therefore Vulkan allows you to mark parts of the pipeline as dynamic upfront, so that you can apply changes without having to recreate the whole pipeline. Our pipeline will not be changing, so we will ignore `setPDynamicState`
