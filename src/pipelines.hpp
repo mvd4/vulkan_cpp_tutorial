@@ -48,7 +48,8 @@ namespace vcpp
     vk::UniquePipeline create_graphics_pipeline(
         const vk::Device& logicalDevice,
         const vk::ShaderModule& vertexShader,
-        const vk::ShaderModule& fragmentShader
+        const vk::ShaderModule& fragmentShader,
+        const vk::Extent2D& viewportExtent
     );
 
 }

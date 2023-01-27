@@ -107,7 +107,8 @@ namespace vcpp
     vk::UniquePipeline create_graphics_pipeline(
         const vk::Device& logicalDevice,
         const vk::ShaderModule& vertexShader,
-        const vk::ShaderModule& fragmentShader
+        const vk::ShaderModule& fragmentShader,
+        const vk::Extent2D& viewportExtent
     )
     {
         const auto shaderStageInfos = std::vector< vk::PipelineShaderStageCreateInfo >{
@@ -125,10 +126,42 @@ namespace vcpp
         const auto inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{}
             .setTopology( vk::PrimitiveTopology::eTriangleList );
 
+        const auto viewport = vk::Viewport{}
+            .setX( 0.f )
+            .setY( 0.f )
+            .setWidth( static_cast< float>( viewportExtent.width ) )
+            .setHeight( static_cast< float>( viewportExtent.height ) )
+            .setMinDepth( 0.f )
+            .setMaxDepth( 1.f );
+
+        const auto scissor = vk::Rect2D{ { 0, 0 }, viewportExtent };
+
+        const auto viewportState = vk::PipelineViewportStateCreateInfo{}
+            .setViewports( viewport )
+            .setScissors( scissor );
+
+        const auto rasterizationState = vk::PipelineRasterizationStateCreateInfo{}
+            .setDepthClampEnable( false )
+            .setRasterizerDiscardEnable( false )
+            .setPolygonMode( vk::PolygonMode::eFill )
+            .setLineWidth( 1.f );
+
+        const auto multisampleState = vk::PipelineMultisampleStateCreateInfo{};
+
+        const auto colorBlendAttachment = vk::PipelineColorBlendAttachmentState{}
+            .setBlendEnable( false );
+
+        const auto colorBlendState = vk::PipelineColorBlendStateCreateInfo{}
+            .setAttachments( colorBlendAttachment );
+
         const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
             .setStages( shaderStageInfos )
             .setPVertexInputState( &vertexInputState )
-            .setPInputAssemblyState( &inputAssemblyState );
+            .setPInputAssemblyState( &inputAssemblyState )
+            .setPViewportState( &viewportState )
+            .setPRasterizationState( &rasterizationState )
+            .setPMultisampleState( &multisampleState )
+            .setPColorBlendState( &colorBlendState );
 
         return logicalDevice.createGraphicsPipelineUnique( vk::PipelineCache{}, pipelineCreateInfo ).value;
     }
