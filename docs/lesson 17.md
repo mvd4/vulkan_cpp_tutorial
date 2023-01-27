@@ -266,7 +266,7 @@ Which leaves the question which format we should select if the surface supports 
 const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR( *surface );
 const auto renderPass = vcpp::create_render_pass( logicalDevice, surfaceFormats[0].format );
 ```
-And now the last validation error is finally gone as well, so we have a correct and working program again. Problem is: we still don't see anything on the screen. This is to be expected as we did not actually put our pipeline into action yet. That's what we're going to do next time but I'd say this lesson has been long enough.
+And now the last validation error is finally gone as well, so we have a correct and working program again. Problem is: we still don't see anything on the screen. This is to be expected as we did not connect our pipeline to any output yet. That's what we're going to do next time but I'd say this lesson has been long enough.
 
 
 1. As said before: if you encounter problems with this simplistic approach, please let me know and I'll extend the tutorial to make it work for you as well.
