@@ -104,12 +104,32 @@ namespace vcpp
     }
 
 
-    vk::UniquePipeline create_graphics_pipeline( const vk::Device& logicalDevice )
+    vk::UniquePipeline create_graphics_pipeline(
+        const vk::Device& logicalDevice,
+        const vk::ShaderModule& vertexShader,
+        const vk::ShaderModule& fragmentShader
+    )
     {
-        const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{};
+        const auto shaderStageInfos = std::vector< vk::PipelineShaderStageCreateInfo >{
+            vk::PipelineShaderStageCreateInfo{}
+                .setStage( vk::ShaderStageFlagBits::eVertex )
+                .setPName( "main" )
+                .setModule( vertexShader ),
+            vk::PipelineShaderStageCreateInfo{}
+                .setStage( vk::ShaderStageFlagBits::eFragment )
+                .setPName( "main" )
+                .setModule( fragmentShader ),
+        };
 
-        return logicalDevice.createGraphicsPipelineUnique(
-            vk::PipelineCache{},
-            pipelineCreateInfo ).value;
+        const auto vertexInputState = vk::PipelineVertexInputStateCreateInfo{};
+        const auto inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{}
+            .setTopology( vk::PrimitiveTopology::eTriangleList );
+
+        const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
+            .setStages( shaderStageInfos )
+            .setPVertexInputState( &vertexInputState )
+            .setPInputAssemblyState( &inputAssemblyState );
+
+        return logicalDevice.createGraphicsPipelineUnique( vk::PipelineCache{}, pipelineCreateInfo ).value;
     }
 }

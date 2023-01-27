@@ -17,6 +17,7 @@ target_sources( ${PROJECT_NAME} PRIVATE glfw_utils.cpp  glfw_utils.hpp )
 target_sources( ${PROJECT_NAME} PRIVATE memory.cpp  memory.hpp )
 target_sources( ${PROJECT_NAME} PRIVATE pipelines.cpp  pipelines.hpp )
 
+
 cmake_policy( SET CMP0076 NEW )
 
 target_link_directories( ${PROJECT_NAME} PRIVATE ${VULKAN_TUTORIAL_PROJECT_ROOT}/build/lib )
@@ -25,11 +26,16 @@ target_link_directories( ${PROJECT_NAME} PRIVATE ${VULKAN_LIB_DIR} )
 target_link_libraries( ${PROJECT_NAME} ${Vulkan_LIBRARIES} )
 target_link_libraries( ${PROJECT_NAME} ${CONAN_LIBS} )
 
-add_dependencies( ${PROJECT_NAME} compute_shader )
+add_dependencies( ${PROJECT_NAME} vertex_shader fragment_shader )
 
 
 # shaders
-add_custom_target( compute_shader
-    COMMAND             "glslc" "${VULKAN_TUTORIAL_PROJECT_ROOT}/shaders/compute.comp" -o "shaders/compute.spv"
+add_custom_target( vertex_shader
+    COMMAND             "glslc" "${VULKAN_TUTORIAL_PROJECT_ROOT}/shaders/vertex.vert" -o "shaders/vertex.spv"
+    WORKING_DIRECTORY   "${CMAKE_BINARY_DIR}/bin"
+)
+
+add_custom_target( fragment_shader
+    COMMAND             "glslc" "${VULKAN_TUTORIAL_PROJECT_ROOT}/shaders/fragment.frag" -o "shaders/fragment.spv"
     WORKING_DIRECTORY   "${CMAKE_BINARY_DIR}/bin"
 )

@@ -43,7 +43,13 @@ int main()
             vk::QueueFlagBits::eGraphics,
             *surface );
 
-        const auto pipeline = create_graphics_pipeline( logicalDevice );
+        const auto vertexShader = create_shader_module( logicalDevice, "./shaders/vertex.spv" );
+        const auto fragmentShader = create_shader_module( logicalDevice, "./shaders/fragment.spv" );
+
+        const auto pipeline = create_graphics_pipeline(
+            logicalDevice,
+            *vertexShader,
+            *fragmentShader );
 
         while ( !glfwWindowShouldClose( window.get() ) )
         {
