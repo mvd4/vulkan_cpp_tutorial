@@ -149,7 +149,12 @@ namespace vcpp
         const auto multisampleState = vk::PipelineMultisampleStateCreateInfo{};
 
         const auto colorBlendAttachment = vk::PipelineColorBlendAttachmentState{}
-            .setBlendEnable( false );
+            .setBlendEnable( false )
+            .setColorWriteMask(
+                vk::ColorComponentFlagBits::eR |
+                vk::ColorComponentFlagBits::eG |
+                vk::ColorComponentFlagBits::eB |
+                vk::ColorComponentFlagBits::eA );
 
         const auto colorBlendState = vk::PipelineColorBlendStateCreateInfo{}
             .setAttachments( colorBlendAttachment );

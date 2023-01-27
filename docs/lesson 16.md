@@ -173,20 +173,26 @@ struct PipelineColorBlendStateCreateInfo
     ...
 }
 ```
-This time we also don't get away with simply using a default constructed `PipelineColorBlendAttachmentState`. Instead we need to disable color blending explicitly:
+This time we also don't get away with simply using a default constructed `PipelineColorBlendAttachmentState`. Instead we need to disable color blending explicitly but still instruct Vulkan which color channels we want to write:
 ```
 struct PipelineColorBlendAttachmentState
 {
     ...
     PipelineColorBlendAttachmentState& setBlendEnable( Bool32 blendEnable_ );
-    ...    
+    PipelineColorBlendAttachmentState& setColorWriteMask( ColorComponentFlags colorWriteMask_ );
+    ...
 };
 ```
 
 So here's how we configure our color blend state:
 ```
 const auto colorBlendAttachment = vk::PipelineColorBlendAttachmentState{}
-    .setBlendEnable( false );
+    .setBlendEnable( false )
+    .setColorWriteMask(
+        vk::ColorComponentFlagBits::eR |
+        vk::ColorComponentFlagBits::eG |
+        vk::ColorComponentFlagBits::eB |
+        vk::ColorComponentFlagBits::eA );
 
 const auto colorBlendState = vk::PipelineColorBlendStateCreateInfo{}
     .setAttachments( colorBlendAttachment );
