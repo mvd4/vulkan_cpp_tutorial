@@ -16,6 +16,7 @@ target_sources( ${PROJECT_NAME} PRIVATE devices.cpp  devices.hpp )
 target_sources( ${PROJECT_NAME} PRIVATE glfw_utils.cpp  glfw_utils.hpp )
 target_sources( ${PROJECT_NAME} PRIVATE memory.cpp  memory.hpp )
 target_sources( ${PROJECT_NAME} PRIVATE pipelines.cpp  pipelines.hpp )
+target_sources( ${PROJECT_NAME} PRIVATE presentation.cpp  presentation.hpp )
 
 
 cmake_policy( SET CMP0076 NEW )

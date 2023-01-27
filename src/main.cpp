@@ -21,6 +21,7 @@ License.
 #include "glfw_utils.hpp"
 #include "memory.hpp"
 #include "pipelines.hpp"
+#include "presentation.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -30,6 +31,7 @@ int main()
 {
     constexpr int windowWidth = 800;
     constexpr int windowHeight = 600;
+    constexpr uint32_t swapchainImageCount = 2u;
 
     try
     {
@@ -51,12 +53,21 @@ int main()
         const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR( *surface );
         const auto renderPass = vcpp::create_render_pass( logicalDevice, surfaceFormats[0].format );
 
+        const auto swapchainExtent = vk::Extent2D{ windowWidth, windowHeight };
+
         const auto pipeline = create_graphics_pipeline(
             logicalDevice,
             *vertexShader,
             *fragmentShader,
             *renderPass,
-            vk::Extent2D{ windowWidth, windowHeight } );
+            swapchainExtent );
+
+        const auto swapchain = vcpp::create_swapchain(
+            logicalDevice,
+            *surface,
+            surfaceFormats[0],
+            swapchainExtent,
+            swapchainImageCount );
 
         while ( !glfwWindowShouldClose( window.get() ) )
         {
