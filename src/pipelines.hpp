@@ -44,4 +44,7 @@ namespace vcpp
     );
 
     vk::UniqueDescriptorPool create_descriptor_pool( const vk::Device& logicalDevice );
+
+    vk::UniquePipeline create_graphics_pipeline( const vk::Device& logicalDevice );
+
 }

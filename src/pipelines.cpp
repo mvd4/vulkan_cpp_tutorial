@@ -102,4 +102,14 @@ namespace vcpp
             .setPoolSizes( poolSize );
         return logicalDevice.createDescriptorPoolUnique( poolCreateInfo );
     }
+
+
+    vk::UniquePipeline create_graphics_pipeline( const vk::Device& logicalDevice )
+    {
+        const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{};
+
+        return logicalDevice.createGraphicsPipelineUnique(
+            vk::PipelineCache{},
+            pipelineCreateInfo ).value;
+    }
 }

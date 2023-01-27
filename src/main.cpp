@@ -27,7 +27,6 @@ License.
 #include <iostream>
 
 
-
 int main()
 {
     try
@@ -44,6 +43,7 @@ int main()
             vk::QueueFlagBits::eGraphics,
             *surface );
 
+        const auto pipeline = create_graphics_pipeline( logicalDevice );
 
         while ( !glfwWindowShouldClose( window.get() ) )
         {
