@@ -22,10 +22,12 @@ License.
 #include "memory.hpp"
 #include "pipelines.hpp"
 #include "presentation.hpp"
+#include "rendering.hpp"
 
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+
 
 int main()
 {
@@ -81,9 +83,48 @@ int main()
             *renderPass
         );
 
+        const auto commandPool = logicalDevice.device->createCommandPoolUnique(
+            vk::CommandPoolCreateInfo{}
+                .setFlags( vk::CommandPoolCreateFlagBits::eResetCommandBuffer )
+                .setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
+        );
+        const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
+            .setCommandPool( *commandPool )
+            .setLevel( vk::CommandBufferLevel::ePrimary )
+            .setCommandBufferCount( requestedSwapchainImageCount );
+        const auto commandBuffers = logicalDevice.device->allocateCommandBuffers( commandBufferAllocateInfo );
+
+        const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
+        const auto semaphore = logicalDevice.device->createSemaphoreUnique( vk::SemaphoreCreateInfo{} );
+
+        size_t frameInFlightIndex = 0;
         while ( !glfwWindowShouldClose( window.get() ) )
         {
             glfwPollEvents();
+
+            auto imageIndex = logicalDevice.device->acquireNextImageKHR(
+                *swapchain,
+                std::numeric_limits< std::uint64_t >::max(),
+                *semaphore ).value;
+
+            vcpp::record_command_buffer(
+                commandBuffers[ frameInFlightIndex ],
+                *pipeline,
+                *renderPass,
+                *framebuffers[ imageIndex ],
+                swapchainExtent );
+
+            const auto submitInfo = vk::SubmitInfo{}
+                .setCommandBuffers( commandBuffers[imageIndex] );
+            queue.submit( submitInfo );
+
+            const auto presentInfo = vk::PresentInfoKHR{}
+                .setSwapchains( *swapchain )
+                .setImageIndices( imageIndex );
+            queue.presentKHR( presentInfo );
+
+
+            frameInFlightIndex = ++frameInFlightIndex % requestedSwapchainImageCount;
         }
     }
     catch( const std::exception& e )
