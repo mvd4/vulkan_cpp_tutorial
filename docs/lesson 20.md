@@ -202,7 +202,7 @@ while ( !glfwWindowShouldClose( window.get() ) )
 {
     ...
     const auto submitInfo = vk::SubmitInfo{}
-        .setCommandBuffers( commandBuffers[imageIndex] );
+        .setCommandBuffers( commandBuffers[ frameInFlightIndex ] );
     queue.submit( submitInfo );
 
     frameInFlightIndex = ++frameInFlightIndex % requestedSwapchainImageCount;
@@ -237,7 +237,7 @@ struct PresentInfoKHR
 - for the same reason you can specify multiple `imageIndicies_` to be presented. The container needs to be of the same size as the one for the swapchains. Each image index refers to the respective swapchain image.
 - because each individual presentation request can produce a different result you can optionally set the `results_` container as an out parameter that will retrieve the respective result of the presentation request.
 
-So let's enhance our render loop accordingly. We only have one swapchain and one image to present in each cycle. The image index is the one we retrieved from our call to `acquireNextImageKHR` and we're going to ignore the results for now:
+So let's enhance our render loop accordingly. We only have one swapchain and one image to present in each cycle. The image index is the one we retrieved from our call to `acquireNextImageKHR` and we're going to ignore the individual results for now(5):
 ```
 while ( !glfwWindowShouldClose( window.get() ) )
 {
@@ -247,7 +247,9 @@ while ( !glfwWindowShouldClose( window.get() ) )
     const auto presentInfo = vk::PresentInfoKHR{}
         .setSwapchains( *swapchain )
         .setImageIndices( imageIndex );
-    queue.presentKHR( presentInfo );
+    const auto result = queue.presentKHR( presentInfo );
+    if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )
+        throw std::runtime_error( "presenting failed" );
 
     frameInFlightIndex = ++frameInFlightIndex % requestedSwapchainImageCount;
 }
@@ -265,3 +267,4 @@ But still: congratulations and thank you for your perseverance. You've made it t
 2. We requested two swapchain images because we only ever want two frames to actually be 'in flight'. I.e. once we're done rendering the second image we want to wait if necessary until the first has finished presenting and only then start rendering the next frame. So we also only need that number of command buffers and not one for every swapchain image.
 3. This would produce the same visible effect as using the respective scissor (see lesson 16)
 4. Since our current scene never changes, re-recording the command buffers is strictly speaking unnecessary overhead. We could also have pre-recorded one command buffer for each framebuffer and then just use those. However, ultimately we want our pipeline to be able to render dynamic scenes, so I decided to prepare the render loop for that already now.
+5. We're not ignoring the return value of `presentKHR` here because that one is marked as `[nodiscard]` and we don't want to see compiler warnings. Checking for `eSuboptimalKHR` is necessary on high-resolution systems such as Apple computers with Retina displays. On those systems the actual image size differs from the logical window size, which is why we get this return code. It's okay for now, we'll fix this issue properly soon.

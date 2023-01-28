@@ -115,13 +115,15 @@ int main()
                 swapchainExtent );
 
             const auto submitInfo = vk::SubmitInfo{}
-                .setCommandBuffers( commandBuffers[imageIndex] );
+                .setCommandBuffers( commandBuffers[ frameInFlightIndex ] );
             queue.submit( submitInfo );
 
             const auto presentInfo = vk::PresentInfoKHR{}
                 .setSwapchains( *swapchain )
                 .setImageIndices( imageIndex );
-            queue.presentKHR( presentInfo );
+            const auto result = queue.presentKHR( presentInfo );
+            if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )
+                throw std::runtime_error( "presenting failed" );
 
 
             frameInFlightIndex = ++frameInFlightIndex % requestedSwapchainImageCount;
