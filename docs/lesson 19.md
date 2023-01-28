@@ -137,7 +137,9 @@ std::vector< vk::UniqueImageView > create_swapchain_image_views(
     return swapChainImageViews;
 }
 ```
-And with those image views we can finally create our framebuffers:
+Note that by querying the images from the swapchain and iterating over them, we automatically get an image view for every image in the swapchain. The number of images / image views will likely be different from our constant `swapchainImageCount` because it also includes the images that the swapchain needs internally. To make this more explicit and avoid mistakes in the future I've therefore renamed the constant to `requestedSwapchainImageCount`.
+
+With those image views we can finally create our framebuffers:
 ```
 std::vector< vk::UniqueFramebuffer > create_framebuffers(
     const vk::Device& logicalDevice,
