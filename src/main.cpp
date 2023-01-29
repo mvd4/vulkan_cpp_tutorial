@@ -64,24 +64,13 @@ int main()
             *renderPass,
             swapchainExtent );
 
-        const auto swapchain = vcpp::create_swapchain(
+        auto swapchain = vcpp::swapchain{
             logicalDevice,
+            *renderPass,
             *surface,
             surfaceFormats[0],
             swapchainExtent,
-            requestedSwapchainImageCount );
-
-        const auto imageViews = vcpp::create_swapchain_image_views(
-            logicalDevice,
-            *swapchain,
-            surfaceFormats[0].format );
-
-        const auto framebuffers = create_framebuffers(
-            logicalDevice,
-            imageViews,
-            swapchainExtent,
-            *renderPass
-        );
+            requestedSwapchainImageCount };
 
         const auto commandPool = logicalDevice.device->createCommandPoolUnique(
             vk::CommandPoolCreateInfo{}
@@ -94,69 +83,40 @@ int main()
             .setCommandBufferCount( requestedSwapchainImageCount );
         const auto commandBuffers = logicalDevice.device->allocateCommandBuffers( commandBufferAllocateInfo );
 
-        std::vector< vk::UniqueFence > inFlightFences;
-        std::vector< vk::UniqueSemaphore > readyForRenderingSemaphores;
-        std::vector< vk::UniqueSemaphore > readyForPresentingSemaphores;
-        for( std::uint32_t i = 0; i < requestedSwapchainImageCount; ++i )
-        {
-            inFlightFences.push_back( logicalDevice.device->createFenceUnique(
-                vk::FenceCreateInfo{}.setFlags( vk::FenceCreateFlagBits::eSignaled )
-            ) );
-
-            readyForRenderingSemaphores.push_back( logicalDevice.device->createSemaphoreUnique(
-                vk::SemaphoreCreateInfo{}
-            ) );
-
-            readyForPresentingSemaphores.push_back( logicalDevice.device->createSemaphoreUnique(
-                vk::SemaphoreCreateInfo{}
-            ) );
-        }
-
         const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
-        size_t frameInFlightIndex = 0;
+
         while ( !glfwWindowShouldClose( window.get() ) )
         {
             glfwPollEvents();
 
-            auto imageIndex = logicalDevice.device->acquireNextImageKHR(
-                *swapchain,
-                std::numeric_limits< std::uint64_t >::max(),
-                *readyForRenderingSemaphores[ frameInFlightIndex ] ).value;
-
-            auto result = logicalDevice.device->waitForFences(
-                *inFlightFences[ frameInFlightIndex ],
-                true,
-                std::numeric_limits< std::uint64_t >::max() );
-            logicalDevice.device->resetFences( *inFlightFences[ frameInFlightIndex ] );
+            const auto frame = swapchain.get_next_frame();
 
             vcpp::record_command_buffer(
-                commandBuffers[ frameInFlightIndex ],
+                commandBuffers[ frame.inFlightIndex ],
                 *pipeline,
                 *renderPass,
-                *framebuffers[ imageIndex ],
+                frame.framebuffer,
                 swapchainExtent );
 
             const vk::PipelineStageFlags waitStages[] = {
                 vk::PipelineStageFlagBits::eColorAttachmentOutput };
             const auto submitInfo = vk::SubmitInfo{}
-                .setCommandBuffers( commandBuffers[ frameInFlightIndex ] )
-                .setWaitSemaphores( *readyForRenderingSemaphores[ frameInFlightIndex ] )
-                .setSignalSemaphores( *readyForPresentingSemaphores[ frameInFlightIndex ] )
+                .setCommandBuffers( commandBuffers[ frame.inFlightIndex ] )
+                .setWaitSemaphores( frame.readyForRenderingSemaphore )
+                .setSignalSemaphores( frame.readyForPresentingSemaphore )
                 .setPWaitDstStageMask( waitStages );
-            queue.submit( submitInfo, *inFlightFences[ frameInFlightIndex ] );
+            queue.submit( submitInfo, frame.inFlightFence );
 
+            const auto swapchains = std::vector< vk::SwapchainKHR >{ swapchain };
             const auto presentInfo = vk::PresentInfoKHR{}
-                .setSwapchains( *swapchain )
-                .setImageIndices( imageIndex )
-                .setWaitSemaphores( *readyForPresentingSemaphores[ frameInFlightIndex ] );
+                .setSwapchains( swapchains )
+                .setImageIndices( frame.swapchainImageIndex )
+                .setWaitSemaphores( frame.readyForPresentingSemaphore );
 
-            result = queue.presentKHR( presentInfo );
+            const auto result = queue.presentKHR( presentInfo );
             if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )
                 throw std::runtime_error( "presenting failed" );
-
-
-            frameInFlightIndex = ++frameInFlightIndex % requestedSwapchainImageCount;
         }
 
         logicalDevice.device->waitIdle();

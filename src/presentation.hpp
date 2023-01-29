@@ -23,24 +23,49 @@ License.
 
 namespace vcpp
 {
-    vk::UniqueSwapchainKHR create_swapchain(
-        const vk::Device& logicalDevice,
-        const vk::SurfaceKHR& surface,
-        const vk::SurfaceFormatKHR& surfaceFormat,
-        const vk::Extent2D& surfaceExtent,
-        const std::uint32_t numSwapchainImages
-    );
+    class swapchain
+    {
+    public:
 
-    std::vector< vk::UniqueImageView > create_swapchain_image_views(
-        const vk::Device& logicalDevice,
-        const vk::SwapchainKHR& swapChain,
-        const vk::Format& imageFormat
-    );
+        struct frame_data
+        {
+            std::uint32_t swapchainImageIndex;
+            std::uint32_t inFlightIndex;
 
-    std::vector< vk::UniqueFramebuffer > create_framebuffers(
-        const vk::Device& logicalDevice,
-        const std::vector< vk::UniqueImageView >& imageViews,
-        const vk::Extent2D& imageExtent,
-        const vk::RenderPass& renderPass
-    );
+            const vk::Framebuffer& framebuffer;
+
+            const vk::Fence& inFlightFence;
+            const vk::Semaphore& readyForRenderingSemaphore;
+            const vk::Semaphore& readyForPresentingSemaphore;
+        };
+
+
+        swapchain(
+            const vk::Device& logicalDevice,
+            const vk::RenderPass& renderPass,
+            const vk::SurfaceKHR& surface,
+            const vk::SurfaceFormatKHR& surfaceFormat,
+            const vk::Extent2D& imageExtent,
+            std::uint32_t maxImagesInFlight );
+
+        operator vk::SwapchainKHR() const { return *m_swapchain; }
+
+        frame_data get_next_frame();
+
+
+    private:
+
+        vk::Device m_logicalDevice;
+        vk::UniqueSwapchainKHR m_swapchain;
+
+        std::uint32_t m_maxImagesInFlight;
+        std::uint32_t m_currentFrameIndex = 0;
+
+        std::vector< vk::UniqueImageView > m_imageViews;
+        std::vector< vk::UniqueFramebuffer > m_framebuffers;
+
+        std::vector< vk::UniqueFence > m_inFlightFences;
+        std::vector< vk::UniqueSemaphore > m_readyForRenderingSemaphores;
+        std::vector< vk::UniqueSemaphore > m_readyForPresentingSemaphores;
+    };
 }

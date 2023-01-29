@@ -114,4 +114,61 @@ namespace vcpp
 
         return result;
     }
+
+
+    swapchain::swapchain(
+        const vk::Device& logicalDevice,
+        const vk::RenderPass& renderPass,
+        const vk::SurfaceKHR& surface,
+        const vk::SurfaceFormatKHR& surfaceFormat,
+        const vk::Extent2D& imageExtent,
+        std::uint32_t maxImagesInFlight
+    )
+        : m_logicalDevice{ logicalDevice }
+        , m_swapchain{ create_swapchain( logicalDevice, surface, surfaceFormat, imageExtent, maxImagesInFlight ) }
+        , m_maxImagesInFlight{ maxImagesInFlight }
+        , m_imageViews{ create_swapchain_image_views( logicalDevice, *m_swapchain, surfaceFormat.format ) }
+        , m_framebuffers{ create_framebuffers( logicalDevice, m_imageViews, imageExtent, renderPass ) }
+    {
+        for( std::uint32_t i = 0; i < maxImagesInFlight; ++i )
+        {
+            m_inFlightFences.push_back( logicalDevice.createFenceUnique(
+                vk::FenceCreateInfo{}.setFlags( vk::FenceCreateFlagBits::eSignaled )
+            ) );
+
+            m_readyForRenderingSemaphores.push_back( logicalDevice.createSemaphoreUnique(
+                vk::SemaphoreCreateInfo{}
+            ) );
+
+            m_readyForPresentingSemaphores.push_back( logicalDevice.createSemaphoreUnique(
+                vk::SemaphoreCreateInfo{}
+            ) );
+        }
+    }
+
+    swapchain::frame_data swapchain::get_next_frame()
+    {
+        auto imageIndex = m_logicalDevice.acquireNextImageKHR(
+            *m_swapchain,
+            std::numeric_limits< std::uint64_t >::max(),
+            *m_readyForRenderingSemaphores[ m_currentFrameIndex ] ).value;
+
+        const auto result = m_logicalDevice.waitForFences(
+            *m_inFlightFences[ m_currentFrameIndex ],
+            true,
+            std::numeric_limits< std::uint64_t >::max() );
+        m_logicalDevice.resetFences( *m_inFlightFences[ m_currentFrameIndex ] );
+
+        const auto frame = frame_data{
+            imageIndex,
+            m_currentFrameIndex,
+            *m_framebuffers[ imageIndex ],
+            *m_inFlightFences[ m_currentFrameIndex ],
+            *m_readyForRenderingSemaphores[ m_currentFrameIndex ],
+            *m_readyForPresentingSemaphores[ m_currentFrameIndex ]
+        };
+
+        m_currentFrameIndex = ++m_currentFrameIndex % m_maxImagesInFlight;
+        return frame;
+    }
 }
