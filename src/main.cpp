@@ -28,6 +28,13 @@ License.
 #include <fstream>
 #include <iostream>
 
+bool windowMinimized = false;
+bool framebufferSizeChanged = true;
+void on_framebuffer_size_changed( GLFWwindow* window, int width, int height )
+{
+    windowMinimized = width == 0 && height == 0;
+    framebufferSizeChanged = true;
+}
 
 int main()
 {
@@ -39,6 +46,7 @@ int main()
     {
         const auto glfw = vcpp::glfw_instance{};
         const auto window = vcpp::create_window( windowWidth, windowHeight, "Vulkan C++ Tutorial" );
+        glfwSetFramebufferSizeCallback( window.get(), on_framebuffer_size_changed );
 
         const auto instance = vcpp::create_instance( vcpp::get_required_extensions_for_glfw() );
         const auto surface = vcpp::create_surface( *instance, *window );
@@ -55,23 +63,6 @@ int main()
         const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR( *surface );
         const auto renderPass = vcpp::create_render_pass( logicalDevice, surfaceFormats[0].format );
 
-        const auto swapchainExtent = vk::Extent2D{ windowWidth, windowHeight };
-
-        const auto pipeline = create_graphics_pipeline(
-            logicalDevice,
-            *vertexShader,
-            *fragmentShader,
-            *renderPass,
-            swapchainExtent );
-
-        auto swapchain = vcpp::swapchain{
-            logicalDevice,
-            *renderPass,
-            *surface,
-            surfaceFormats[0],
-            swapchainExtent,
-            requestedSwapchainImageCount };
-
         const auto commandPool = logicalDevice.device->createCommandPoolUnique(
             vk::CommandPoolCreateInfo{}
                 .setFlags( vk::CommandPoolCreateFlagBits::eResetCommandBuffer )
@@ -85,12 +76,46 @@ int main()
 
         const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
+        vk::UniquePipeline pipeline;
+        vcpp::swapchain_ptr_t swapchain;
+        vk::Extent2D swapchainExtent;
 
         while ( !glfwWindowShouldClose( window.get() ) )
         {
             glfwPollEvents();
 
-            const auto frame = swapchain.get_next_frame();
+            if ( windowMinimized )
+                continue;
+
+            if ( framebufferSizeChanged )
+            {
+                logicalDevice.device->waitIdle();
+
+                pipeline.reset();
+                swapchain.reset();
+
+                const auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR( *surface );
+                swapchainExtent = capabilities.currentExtent;
+
+                pipeline = create_graphics_pipeline(
+                    logicalDevice,
+                    *vertexShader,
+                    *fragmentShader,
+                    *renderPass,
+                    swapchainExtent );
+
+                swapchain = create_swapchain(
+                    logicalDevice,
+                    *renderPass,
+                    *surface,
+                    surfaceFormats[0],
+                    swapchainExtent,
+                    requestedSwapchainImageCount );
+
+                framebufferSizeChanged = false;
+            }
+
+            const auto frame = swapchain->get_next_frame();
 
             vcpp::record_command_buffer(
                 commandBuffers[ frame.inFlightIndex ],
@@ -108,14 +133,14 @@ int main()
                 .setPWaitDstStageMask( waitStages );
             queue.submit( submitInfo, frame.inFlightFence );
 
-            const auto swapchains = std::vector< vk::SwapchainKHR >{ swapchain };
+            const auto swapchains = std::vector< vk::SwapchainKHR >{ *swapchain };
             const auto presentInfo = vk::PresentInfoKHR{}
                 .setSwapchains( swapchains )
                 .setImageIndices( frame.swapchainImageIndex )
                 .setWaitSemaphores( frame.readyForPresentingSemaphore );
 
             const auto result = queue.presentKHR( presentInfo );
-            if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )
+            if ( result != vk::Result::eSuccess )
                 throw std::runtime_error( "presenting failed" );
         }
 

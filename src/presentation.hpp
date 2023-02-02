@@ -68,4 +68,14 @@ namespace vcpp
         std::vector< vk::UniqueSemaphore > m_readyForRenderingSemaphores;
         std::vector< vk::UniqueSemaphore > m_readyForPresentingSemaphores;
     };
+
+    using swapchain_ptr_t = std::unique_ptr< vcpp::swapchain >;
+
+    swapchain_ptr_t create_swapchain(
+        const vk::Device& logicalDevice,
+        const vk::RenderPass& renderPass,
+        const vk::SurfaceKHR& surface,
+        const vk::SurfaceFormatKHR& surfaceFormat,
+        const vk::Extent2D& imageExtent,
+        std::uint32_t maxImagesInFlight );
 }

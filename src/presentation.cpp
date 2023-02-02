@@ -171,4 +171,23 @@ namespace vcpp
         m_currentFrameIndex = ++m_currentFrameIndex % m_maxImagesInFlight;
         return frame;
     }
+
+
+    swapchain_ptr_t create_swapchain(
+        const vk::Device& logicalDevice,
+        const vk::RenderPass& renderPass,
+        const vk::SurfaceKHR& surface,
+        const vk::SurfaceFormatKHR& surfaceFormat,
+        const vk::Extent2D& imageExtent,
+        std::uint32_t maxImagesInFlight
+    )
+    {
+        return std::make_unique< vcpp::swapchain >(
+            logicalDevice,
+            renderPass,
+            surface,
+            surfaceFormat,
+            imageExtent,
+            maxImagesInFlight );
+    }
 }
