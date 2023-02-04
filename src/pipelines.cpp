@@ -24,6 +24,22 @@ License.
 
 namespace vcpp
 {
+
+    namespace
+    {
+        std::uint32_t get_vertex_format_size( vk::Format format )
+        {
+            switch ( format )
+            {
+            case vk::Format::eR32G32B32A32Sfloat:
+                return static_cast< std::uint32_t >( 4 * sizeof( float ) );
+            default:
+                throw std::invalid_argument( "unsupported vertex format" );
+            }
+        }
+    }
+
+
     vk::UniqueShaderModule create_shader_module(
         const vk::Device& logicalDevice,
         const std::filesystem::path& path
@@ -140,7 +156,8 @@ namespace vcpp
         const vk::ShaderModule& vertexShader,
         const vk::ShaderModule& fragmentShader,
         const vk::RenderPass& renderPass,
-        const vk::Extent2D& viewportExtent
+        const vk::Extent2D& viewportExtent,
+        const std::vector< vk::Format >& vertexFormats
     )
     {
         const auto shaderStageInfos = std::vector< vk::PipelineShaderStageCreateInfo >{
@@ -155,20 +172,28 @@ namespace vcpp
         };
 
 
+        auto vertexAttributeDescriptions = std::vector< vk::VertexInputAttributeDescription >{};
+        std::uint32_t offset = 0;
+        for( std::uint32_t v = 0; v < vertexFormats.size(); ++v )
+        {
+            vertexAttributeDescriptions.push_back(
+                vk::VertexInputAttributeDescription{}
+                    .setBinding( 0 )
+                    .setLocation( v )
+                    .setOffset( offset )
+                    .setFormat( vertexFormats[ v ] )
+            );
+            offset += get_vertex_format_size( vertexFormats[ v ] );
+        }
+
         const auto vertexBindingDescription = vk::VertexInputBindingDescription{}
             .setBinding( 0 )
-            .setStride( 4 * sizeof( float ) )
+            .setStride( offset )
             .setInputRate( vk::VertexInputRate::eVertex );
-
-        const auto vertexAttributeDescription = vk::VertexInputAttributeDescription{}
-            .setBinding( 0 )
-            .setLocation( 0 )
-            .setOffset( 0 )
-            .setFormat( vk::Format::eR32G32B32A32Sfloat );
 
         const auto vertexInputState = vk::PipelineVertexInputStateCreateInfo{}
             .setVertexBindingDescriptions( vertexBindingDescription )
-            .setVertexAttributeDescriptions( vertexAttributeDescription );
+            .setVertexAttributeDescriptions( vertexAttributeDescriptions );
 
         const auto inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{}
             .setTopology( vk::PrimitiveTopology::eTriangleList );

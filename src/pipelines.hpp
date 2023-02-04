@@ -55,7 +55,8 @@ namespace vcpp
         const vk::ShaderModule& vertexShader,
         const vk::ShaderModule& fragmentShader,
         const vk::RenderPass& renderPass,
-        const vk::Extent2D& viewportExtent
+        const vk::Extent2D& viewportExtent,
+        const std::vector< vk::Format >& vertexFormats
     );
 
 }

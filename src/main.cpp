@@ -80,11 +80,16 @@ int main()
         vcpp::swapchain_ptr_t swapchain;
         vk::Extent2D swapchainExtent;
 
+        const auto vertexFormats = std::vector< vk::Format  >{
+            vk::Format::eR32G32B32A32Sfloat,
+            vk::Format::eR32G32B32A32Sfloat,
+        };
+
         constexpr size_t vertexCount = 3;
-        const std::array< float, 4 * vertexCount > vertices = {
-            0.0, -0.5, 0.0, 1.0,
-            0.5, 0.5, 0.0, 1.0,
-            -0.5, 0.5, 0.0, 1.0 };
+        const std::array< float, 8 * vertexCount > vertices = {
+            0.f, -.5f, 0.f, 1.f,    1.f, 0.f, 0.f, 1.f,
+            .5f, .5f, 0.f, 1.f,     0.f, 1.f, 0.f, 1.f,
+            -.5f, .5f, 0.f, 1.f,    1.f, 1.f, 0.f, 1.f };
 
         const auto gpuVertexBuffer = create_gpu_buffer(
             physicalDevice,
@@ -117,7 +122,8 @@ int main()
                     *vertexShader,
                     *fragmentShader,
                     *renderPass,
-                    swapchainExtent );
+                    swapchainExtent,
+                    vertexFormats );
 
                 swapchain = create_swapchain(
                     logicalDevice,
