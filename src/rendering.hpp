@@ -29,6 +29,8 @@ namespace vcpp
         const vk::Pipeline& pipeline,
         const vk::RenderPass& renderPass,
         const vk::Framebuffer& frameBuffer,
-        const vk::Extent2D& renderExtent
+        const vk::Extent2D& renderExtent,
+        const vk::Buffer& vertexBuffer,
+        const std::uint32_t vertexCount
     );
 }

@@ -80,6 +80,21 @@ int main()
         vcpp::swapchain_ptr_t swapchain;
         vk::Extent2D swapchainExtent;
 
+        constexpr size_t vertexCount = 3;
+        const std::array< float, 4 * vertexCount > vertices = {
+            0.0, -0.5, 0.0, 1.0,
+            0.5, 0.5, 0.0, 1.0,
+            -0.5, 0.5, 0.0, 1.0 };
+
+        const auto gpuVertexBuffer = create_gpu_buffer(
+            physicalDevice,
+            logicalDevice,
+            sizeof( vertices ),
+            vk::BufferUsageFlagBits::eVertexBuffer
+        );
+
+        vcpp::copy_data_to_buffer( *logicalDevice.device, vertices, gpuVertexBuffer );
+
         while ( !glfwWindowShouldClose( window.get() ) )
         {
             glfwPollEvents();
@@ -122,7 +137,9 @@ int main()
                 *pipeline,
                 *renderPass,
                 frame.framebuffer,
-                swapchainExtent );
+                swapchainExtent,
+                *gpuVertexBuffer.buffer,
+                vertexCount );
 
             const vk::PipelineStageFlags waitStages[] = {
                 vk::PipelineStageFlagBits::eColorAttachmentOutput };

@@ -27,7 +27,9 @@ namespace vcpp
         const vk::Pipeline& pipeline,
         const vk::RenderPass& renderPass,
         const vk::Framebuffer& frameBuffer,
-        const vk::Extent2D& renderExtent
+        const vk::Extent2D& renderExtent,
+        const vk::Buffer& vertexBuffer,
+        const std::uint32_t vertexCount
     )
     {
         const auto clearValues = std::array< vk::ClearValue, 1 >{
@@ -44,7 +46,10 @@ namespace vcpp
         commandBuffer.bindPipeline( vk::PipelineBindPoint::eGraphics, pipeline );
 
         commandBuffer.beginRenderPass( renderPassBeginInfo, vk::SubpassContents::eInline );
-        commandBuffer.draw( 3, 1, 0, 0 );
+
+        commandBuffer.bindVertexBuffers( 0, vertexBuffer, { 0 } );
+
+        commandBuffer.draw( vertexCount, 1, 0, 0 );
         commandBuffer.endRenderPass();
 
         commandBuffer.end();
