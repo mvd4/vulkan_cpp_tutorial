@@ -24,6 +24,12 @@ License.
 #include "presentation.hpp"
 #include "rendering.hpp"
 
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES  // this makes glm adhere to vulkans data alignment requirements most of the time
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE   // vulkan depth range 0 to 1 (openGL uses -1 to 1 )
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/ext.hpp>
+
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -85,11 +91,57 @@ int main()
             vk::Format::eR32G32B32A32Sfloat,
         };
 
-        constexpr size_t vertexCount = 3;
-        const std::array< float, 8 * vertexCount > vertices = {
-            0.f, -.5f, 0.f, 1.f,    1.f, 0.f, 0.f, 1.f,
-            .5f, .5f, 0.f, 1.f,     0.f, 1.f, 0.f, 1.f,
-            -.5f, .5f, 0.f, 1.f,    1.f, 1.f, 0.f, 1.f };
+
+        constexpr size_t vertexCount = 36;
+        const std::array< glm::vec4, 2 * vertexCount > vertices = {
+            // front                            (red)
+            glm::vec4{ -.5f, -.5f, .5f, 1.f },  glm::vec4{ 1.f, 0.f, 0.f, 1.f },
+            glm::vec4{ .5f, -.5f, .5f, 1.f },   glm::vec4{ 1.f, 0.f, 0.f, 1.f },
+            glm::vec4{ -.5f, .5f, .5f, 1.f },   glm::vec4{ 1.f, 0.f, 0.f, 1.f },
+            glm::vec4{ .5f, -.5f, .5f, 1.f },   glm::vec4{ 1.f, 0.f, 0.f, 1.f },
+            glm::vec4{ .5f, .5f, .5f, 1.f },    glm::vec4{ 1.f, 0.f, 0.f, 1.f },
+            glm::vec4{ -.5f, .5f, .5f, 1.f },   glm::vec4{ 1.f, 0.f, 0.f, 1.f },
+
+            // back                             (yellow)
+            glm::vec4{ -.5f, -.5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f },
+            glm::vec4{ .5f, -.5f, -.5f, 1.f },  glm::vec4{ 1.f, 1.f, 0.f, 1.f },
+            glm::vec4{ -.5f, .5f, -.5f, 1.f },  glm::vec4{ 1.f, 1.f, 0.f, 1.f },
+            glm::vec4{ .5f, -.5f, -.5f, 1.f },  glm::vec4{ 1.f, 1.f, 0.f, 1.f },
+            glm::vec4{ .5f, .5f, -.5f, 1.f },   glm::vec4{ 1.f, 1.f, 0.f, 1.f },
+            glm::vec4{ -.5f, .5f, -.5f, 1.f },  glm::vec4{ 1.f, 1.f, 0.f, 1.f },
+
+            // left                             (violet)
+            glm::vec4{ -.5f, -.5f, .5f, 1.f },  glm::vec4{ 1.f, 0.f, 1.f, 1.f },
+            glm::vec4{ -.5f, -.5f, -.5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f },
+            glm::vec4{ -.5f, .5f, -.5f, 1.f },  glm::vec4{ 1.f, 0.f, 1.f, 1.f },
+            glm::vec4{ -.5f, -.5f, .5f, 1.f },  glm::vec4{ 1.f, 0.f, 1.f, 1.f },
+            glm::vec4{ -.5f, .5f, -.5f, 1.f },  glm::vec4{ 1.f, 0.f, 1.f, 1.f },
+            glm::vec4{ -.5f, .5f, .5f, 1.f },   glm::vec4{ 1.f, 0.f, 1.f, 1.f },
+
+            // right                             (green)
+            glm::vec4{ .5f, -.5f, .5f, 1.f },   glm::vec4{ 0.f, 1.f, 0.f, 1.f },
+            glm::vec4{ .5f, -.5f, -.5f, 1.f },  glm::vec4{ 0.f, 1.f, 0.f, 1.f },
+            glm::vec4{ .5f, .5f, -.5f, 1.f },   glm::vec4{ 0.f, 1.f, 0.f, 1.f },
+            glm::vec4{ .5f, -.5f, .5f, 1.f },   glm::vec4{ 0.f, 1.f, 0.f, 1.f },
+            glm::vec4{ .5f, .5f, -.5f, 1.f },   glm::vec4{ 0.f, 1.f, 0.f, 1.f },
+            glm::vec4{ .5f, .5f, .5f, 1.f },    glm::vec4{ 0.f, 1.f, 0.f, 1.f },
+
+            // top                              (turquoise)
+            glm::vec4{ -.5f, -.5f, .5f, 1.f },  glm::vec4{ 0.f, 1.f, 1.f, 1.f },
+            glm::vec4{ .5f, -.5f, .5f, 1.f },   glm::vec4{ 0.f, 1.f, 1.f, 1.f },
+            glm::vec4{ .5f, -.5f, -.5f, 1.f },  glm::vec4{ 0.f, 1.f, 1.f, 1.f },
+            glm::vec4{ -.5f, -.5f, .5f, 1.f },  glm::vec4{ 0.f, 1.f, 1.f, 1.f },
+            glm::vec4{ .5f, -.5f, -.5f, 1.f },  glm::vec4{ 0.f, 1.f, 1.f, 1.f },
+            glm::vec4{ -.5f, -.5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f },
+
+            // bottom                           (blue)
+            glm::vec4{ -.5f, .5f, .5f, 1.f },   glm::vec4{ 0.f, 0.f, 1.f, 1.f },
+            glm::vec4{ .5f, .5f, .5f, 1.f },    glm::vec4{ 0.f, 0.f, 1.f, 1.f },
+            glm::vec4{ .5f, .5f, -.5f, 1.f },   glm::vec4{ 0.f, 0.f, 1.f, 1.f },
+            glm::vec4{ -.5f, .5f, .5f, 1.f },   glm::vec4{ 0.f, 0.f, 1.f, 1.f },
+            glm::vec4{ .5f, .5f, -.5f, 1.f },   glm::vec4{ 0.f, 0.f, 1.f, 1.f },
+            glm::vec4{ -.5f, .5f, -.5f, 1.f },  glm::vec4{ 0.f, 0.f, 1.f, 1.f },
+        };
 
         const auto gpuVertexBuffer = create_gpu_buffer(
             physicalDevice,
@@ -98,7 +150,13 @@ int main()
             vk::BufferUsageFlagBits::eVertexBuffer
         );
 
-        vcpp::copy_data_to_buffer( *logicalDevice.device, vertices, gpuVertexBuffer );
+
+        glm::mat4 model{1};
+        glm::mat4 view{1};
+        glm::mat4 projection{1};
+        float rotationAngle = 0.f;
+
+        auto verticesTemp = vertices;
 
         while ( !glfwWindowShouldClose( window.get() ) )
         {
@@ -133,8 +191,28 @@ int main()
                     swapchainExtent,
                     requestedSwapchainImageCount );
 
+                view = glm::translate( glm::mat4{1}, glm::vec3{ 0.f, 0.f, -3.f } );
+
+                projection = glm::perspective(
+                    glm::radians(30.0f),
+                    swapchainExtent.width / (float)swapchainExtent.height,
+                    0.1f,
+                    10.0f);
+
                 framebufferSizeChanged = false;
             }
+
+            model = glm::rotate( glm::mat4{1}, rotationAngle, glm::vec3{ 0.f, 1.f, 0.f } );
+
+
+            for (size_t i = 0; i < vertexCount; ++i)
+            {
+                verticesTemp[2 * i] = projection * view * model * vertices[2 * i];
+            }
+
+            vcpp::copy_data_to_buffer( *logicalDevice.device, verticesTemp, gpuVertexBuffer );
+            rotationAngle += 0.01f;
+
 
             const auto frame = swapchain->get_next_frame();
 

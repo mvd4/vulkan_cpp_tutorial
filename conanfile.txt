@@ -1,6 +1,7 @@
 [requires]
     glfw/[>3.3.6]
     fmt/[>8.0.0]
+    glm/[>0.9.8]
 
 [generators]
     cmake
