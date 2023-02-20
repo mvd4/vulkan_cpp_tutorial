@@ -135,16 +135,32 @@ namespace vcpp
             .setInitialLayout( vk::ImageLayout::eUndefined )
             .setFinalLayout( vk::ImageLayout::ePresentSrcKHR );
 
+        const auto depthAttachment = vk::AttachmentDescription{}
+            .setFormat( vk::Format::eD32Sfloat )
+            .setSamples( vk::SampleCountFlagBits::e1 )
+            .setLoadOp( vk::AttachmentLoadOp::eClear )
+            .setStoreOp( vk::AttachmentStoreOp::eDontCare )
+            .setStencilLoadOp( vk::AttachmentLoadOp::eDontCare )
+            .setStencilStoreOp( vk::AttachmentStoreOp::eDontCare )
+            .setInitialLayout( vk::ImageLayout::eUndefined )
+            .setFinalLayout( vk::ImageLayout::eDepthStencilAttachmentOptimal );
+
         const auto colorAttachmentRef = vk::AttachmentReference{}
-             .setAttachment( 0 )
-             .setLayout( vk::ImageLayout::eColorAttachmentOptimal );
+            .setAttachment( 0 )
+            .setLayout( vk::ImageLayout::eColorAttachmentOptimal );
+
+        const auto depthAttachmentRef = vk::AttachmentReference{}
+            .setAttachment( 1 )
+            .setLayout( vk::ImageLayout::eDepthStencilAttachmentOptimal );
 
         const auto subpass = vk::SubpassDescription{}
             .setPipelineBindPoint( vk::PipelineBindPoint::eGraphics )
+            .setPDepthStencilAttachment( &depthAttachmentRef )
             .setColorAttachments( colorAttachmentRef );
 
+        const auto attachments = std::array< vk::AttachmentDescription, 2>{ colorAttachment, depthAttachment };
         const auto renderPassCreateInfo = vk::RenderPassCreateInfo{}
-            .setAttachments( colorAttachment )
+            .setAttachments( attachments )
             .setSubpasses( subpass );
 
         return logicalDevice.createRenderPassUnique( renderPassCreateInfo );
@@ -220,6 +236,13 @@ namespace vcpp
 
         const auto multisampleState = vk::PipelineMultisampleStateCreateInfo{};
 
+        const auto depthStencilState = vk::PipelineDepthStencilStateCreateInfo{}
+            .setDepthTestEnable( true )
+            .setDepthWriteEnable( true )
+            .setDepthCompareOp( vk::CompareOp::eLess )
+            .setDepthBoundsTestEnable( false )
+            .setStencilTestEnable( false );
+
         const auto colorBlendAttachment = vk::PipelineColorBlendAttachmentState{}
             .setBlendEnable( false )
             .setColorWriteMask(
@@ -240,6 +263,7 @@ namespace vcpp
             .setPViewportState( &viewportState )
             .setPRasterizationState( &rasterizationState )
             .setPMultisampleState( &multisampleState )
+            .setPDepthStencilState( &depthStencilState )
             .setPColorBlendState( &colorBlendState )
             .setLayout( *pipelineLayout )
             .setRenderPass( renderPass );

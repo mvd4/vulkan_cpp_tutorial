@@ -19,6 +19,9 @@ License.
 
 #include "presentation.hpp"
 
+#include "memory.hpp"
+
+
 namespace vcpp
 {
 
@@ -51,11 +54,12 @@ namespace vcpp
     vk::UniqueImageView create_image_view(
         const vk::Device& logicalDevice,
         const vk::Image& image,
-        const vk::Format& format
+        const vk::Format& format,
+        const vk::ImageAspectFlags flags = vk::ImageAspectFlagBits::eColor
     )
     {
         const auto subresourceRange = vk::ImageSubresourceRange{}
-            .setAspectMask( vk::ImageAspectFlagBits::eColor )
+            .setAspectMask( flags )
             .setBaseMipLevel( 0 )
             .setLevelCount( 1 )
             .setBaseArrayLayer( 0 )
@@ -94,6 +98,7 @@ namespace vcpp
     std::vector< vk::UniqueFramebuffer > create_framebuffers(
         const vk::Device& logicalDevice,
         const std::vector< vk::UniqueImageView >& imageViews,
+        const vk::ImageView& depthImageView,
         const vk::Extent2D& imageExtent,
         const vk::RenderPass& renderPass
     )
@@ -101,7 +106,7 @@ namespace vcpp
         std::vector< vk::UniqueFramebuffer > result;
         for( const auto& v : imageViews )
         {
-            std::array< vk::ImageView, 1 > attachments = { *v };
+            std::array< vk::ImageView, 2 > attachments = { *v, depthImageView };
             const auto frameBufferCreateInfo = vk::FramebufferCreateInfo{}
                 .setRenderPass( renderPass )
                 .setAttachments( attachments )
@@ -116,7 +121,46 @@ namespace vcpp
     }
 
 
+    gpu_image create_depth_image(
+        const vk::PhysicalDevice& physicalDevice,
+        const vk::Device& logicalDevice,
+        const vk::Extent2D& imageExtent
+    )
+    {
+        const auto createInfo = vk::ImageCreateInfo{}
+            .setImageType( vk::ImageType::e2D )
+            .setFormat( vk::Format::eD32Sfloat )
+            .setExtent( vk::Extent3D{ imageExtent.width, imageExtent.height, 1 } )
+            .setMipLevels( 1 )
+            .setArrayLayers( 1 )
+            .setSamples( vk::SampleCountFlagBits::e1 )
+            .setTiling( vk::ImageTiling::eOptimal )
+            .setUsage( vk::ImageUsageFlagBits::eDepthStencilAttachment )
+            .setSharingMode( vk::SharingMode::eExclusive )
+            .setInitialLayout( vk::ImageLayout::eUndefined );
+        auto image = logicalDevice.createImageUnique( createInfo );
+
+        const auto memoryRequirements = logicalDevice.getImageMemoryRequirements( *image );
+        const auto memoryProperties = physicalDevice.getMemoryProperties();
+
+        const auto memoryIndex = vcpp::find_suitable_memory_index(
+            memoryProperties,
+            memoryRequirements.memoryTypeBits,
+            vk::MemoryPropertyFlagBits::eDeviceLocal );
+
+        const auto allocateInfo = vk::MemoryAllocateInfo{}
+            .setAllocationSize( memoryRequirements.size )
+            .setMemoryTypeIndex( memoryIndex );
+
+        auto memory = logicalDevice.allocateMemoryUnique( allocateInfo );
+        logicalDevice.bindImageMemory( *image, *memory, 0u );
+
+        return { std::move( image ), std::move( memory ) };
+    }
+
+
     swapchain::swapchain(
+        const vk::PhysicalDevice& physicalDevice,
         const vk::Device& logicalDevice,
         const vk::RenderPass& renderPass,
         const vk::SurfaceKHR& surface,
@@ -128,8 +172,15 @@ namespace vcpp
         , m_swapchain{ create_swapchain( logicalDevice, surface, surfaceFormat, imageExtent, maxImagesInFlight ) }
         , m_maxImagesInFlight{ maxImagesInFlight }
         , m_imageViews{ create_swapchain_image_views( logicalDevice, *m_swapchain, surfaceFormat.format ) }
-        , m_framebuffers{ create_framebuffers( logicalDevice, m_imageViews, imageExtent, renderPass ) }
+        , m_depthImage{ create_depth_image( physicalDevice, logicalDevice, imageExtent ) }
+        , m_depthImageView{ create_image_view(
+            logicalDevice,
+            *m_depthImage.image,
+            vk::Format::eD32Sfloat,
+            vk::ImageAspectFlagBits::eDepth ) }
     {
+        m_framebuffers = create_framebuffers( logicalDevice, m_imageViews, *m_depthImageView, imageExtent, renderPass );
+
         for( std::uint32_t i = 0; i < maxImagesInFlight; ++i )
         {
             m_inFlightFences.push_back( logicalDevice.createFenceUnique(
@@ -174,6 +225,7 @@ namespace vcpp
 
 
     swapchain_ptr_t create_swapchain(
+        const vk::PhysicalDevice& physicalDevice,
         const vk::Device& logicalDevice,
         const vk::RenderPass& renderPass,
         const vk::SurfaceKHR& surface,
@@ -183,6 +235,7 @@ namespace vcpp
     )
     {
         return std::make_unique< vcpp::swapchain >(
+            physicalDevice,
             logicalDevice,
             renderPass,
             surface,

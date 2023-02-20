@@ -184,6 +184,7 @@ int main()
                     vertexFormats );
 
                 swapchain = create_swapchain(
+                    physicalDevice,
                     logicalDevice,
                     *renderPass,
                     *surface,

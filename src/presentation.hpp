@@ -23,6 +23,14 @@ License.
 
 namespace vcpp
 {
+    struct gpu_image
+    {
+        vk::UniqueImage image;
+        vk::UniqueDeviceMemory memory;
+    };
+
+
+
     class swapchain
     {
     public:
@@ -41,6 +49,7 @@ namespace vcpp
 
 
         swapchain(
+            const vk::PhysicalDevice& physicalDevice,
             const vk::Device& logicalDevice,
             const vk::RenderPass& renderPass,
             const vk::SurfaceKHR& surface,
@@ -64,6 +73,9 @@ namespace vcpp
         std::vector< vk::UniqueImageView > m_imageViews;
         std::vector< vk::UniqueFramebuffer > m_framebuffers;
 
+        gpu_image m_depthImage;
+        vk::UniqueImageView m_depthImageView;
+
         std::vector< vk::UniqueFence > m_inFlightFences;
         std::vector< vk::UniqueSemaphore > m_readyForRenderingSemaphores;
         std::vector< vk::UniqueSemaphore > m_readyForPresentingSemaphores;
@@ -72,6 +84,7 @@ namespace vcpp
     using swapchain_ptr_t = std::unique_ptr< vcpp::swapchain >;
 
     swapchain_ptr_t create_swapchain(
+        const vk::PhysicalDevice& physicalDevice,
         const vk::Device& logicalDevice,
         const vk::RenderPass& renderPass,
         const vk::SurfaceKHR& surface,
