@@ -1,0 +1,7 @@
+{
+  "name": "vulkan-cpp-tutorial",
+  "version-string": "lesson_1",
+  "dependencies": [
+    "vulkan"
+  ]
+}
