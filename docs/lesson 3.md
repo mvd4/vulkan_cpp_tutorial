@@ -74,7 +74,7 @@ auto createVulkanInstance() -> vk::UniqueInstance
 ```
 Second: since the Vulkan C++ interface can throw exceptions, I'll wrap all the code in the main function in a try-catch block:
 ```cpp
-int main()
+auto main() -> int
 {
     try
     {
@@ -175,7 +175,7 @@ auto selectPhysicalDevice( const vk::Instance& instance ) -> vk::PhysicalDevice
     return physicalDevice;
 }
 
-int main()
+auto main() -> int
 {
     try
     {

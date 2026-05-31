@@ -19,7 +19,10 @@ License.
 
 #include <vulkan/vulkan.hpp>
 
+#include <cassert>
 #include <iostream>
+#include <stdexcept>
+#include <vector>
 
 
 auto createVulkanInstance() -> vk::UniqueInstance
@@ -71,8 +74,8 @@ auto selectPhysicalDevice( const vk::Instance& instance ) -> vk::PhysicalDevice
         throw std::runtime_error( "No Vulkan devices found" );
 
     std::cout << "Available physical devices:\n";
-    for ( const auto& d : physicalDevices )
-        printPhysicalDeviceProperties( d );
+    for ( const auto& device : physicalDevices )
+        printPhysicalDeviceProperties( device );
 
     const auto physicalDevice = findBestPhysicalDevice( physicalDevices );
     std::cout << "\nSelected Device: " << physicalDevice.getProperties().deviceName << "\n";
