@@ -37,11 +37,34 @@ auto createVulkanInstance() -> vk::UniqueInstance
     return vk::createInstanceUnique( instanceCreateInfo );
 }
 
+auto printPhysicalDeviceProperties( const vk::PhysicalDevice& device ) -> void
+{
+    const auto props = device.getProperties();
+    const auto features = device.getFeatures();
+
+    std::cout <<
+        "    " << props.deviceName << ":" <<
+        "\n      is discrete GPU: " << ( props.deviceType == vk::PhysicalDeviceType::eDiscreteGpu ? "yes" : "no" ) <<
+        "\n      has geometry shader: " << ( features.geometryShader ? "yes" : "no" ) <<
+        "\n      has tessellation shader: " << ( features.tessellationShader ? "yes" : "no" ) <<
+        "\n      supports anisotropic filtering: " << ( features.samplerAnisotropy ? "yes" : "no" ) <<
+        "\n";
+}
+
+
 auto main() -> int
 {
     try
     {
         const auto instance = createVulkanInstance();
+
+        const auto physicalDevices = instance->enumeratePhysicalDevices();
+        if ( physicalDevices.empty() )
+            throw std::runtime_error( "No Vulkan devices found" );
+
+        std::cout << "Available physical devices:\n";
+        for ( const auto& d : physicalDevices )
+            printPhysicalDeviceProperties( d );
     }
     catch( const std::exception& e )
     {
