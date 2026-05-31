@@ -13,7 +13,8 @@
       "description": "Debug build using the vcpkg toolchain. Requires the VCPKG_ROOT environment variable to be set.",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG": "${sourceDir}/build/bin/Debug"
       }
     },
     {
@@ -22,7 +23,8 @@
       "description": "Release build using the vcpkg toolchain. Requires the VCPKG_ROOT environment variable to be set.",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE": "${sourceDir}/build/bin/Release"
       }
     }
   ],

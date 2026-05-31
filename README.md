@@ -9,7 +9,7 @@ Every lesson will get a dedicated branch in this repository to help you follow a
 
 Have fun!
 
-### System Requirements
+## System Requirements
 * Windows, macOS or Linux
 * C++ 20 compiler toolchain
 * [CMake](https://cmake.org)
@@ -18,6 +18,29 @@ Have fun!
 
 For a more detailed setup guide, please refer to lesson #1.
 
-### Disclaimers:
+## Building and running
+
+### Creating the project files
+```bash
+$ cmake --preset debug  # alternatively choose the `release` preset
+```
+
+### Using a specific generator
+```bash
+$ cmake --preset debug -G <your desired project file type>
+```
+
+### Building the executable
+```bash
+$ cmake --build --preset debug  # alternatively choose the `release` preset
+```
+
+### Running the executable
+```bash
+$ ./build/bin/debug/vulkan-cpp-tutorial  # alternatively choose release subfolder; on Windows the binary name is vulkan-cpp-tutorial.exe
+```
+
+
+## Disclaimers:
 1. I’m not an expert in graphics programming. I’m writing this tutorial in the spirit of learning-by-teaching in the hope that it’ll be of help to others and ease their first steps in becoming Vulkan experts. If you spot errors or inaccuracies, please let me know so I can fix them and make this knowledge available to everyone.
 2. I’m standing on the shoulders of giants here. A lot of what I know about Vulkan programming I learned from the fantastic [vulkan tutorial](https://vulkan-tutorial.com/). I also got quite a bit out of looking at the [vookoo library](https://github.com/andy-thomason/Vookoo). So please check out these great projects and consider supporting the authors.
