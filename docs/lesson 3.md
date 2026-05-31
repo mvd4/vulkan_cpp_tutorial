@@ -146,6 +146,46 @@ There are of course many more properties and features in the respective structs,
       has tessellation shader: yes
       supports anisotropic filtering: yes
 ```
+Sometimes there will be only one available device, so there isn't much of a choice: use it or forget about Vulkan. In our case here we have an integrated and a dedicated GPU so we'll have to select one, either automatically or by asking the user of your application. In many cases you'll prefer a discrete GPU over the integrated one because those are usually more powerful and support more functionality. If your application requires specific features you obviously also need to make sure that those are supported and choose the device accordingly.
+The takeaway here is: it's impossible to suggest a generic solution for device selection that will work in all cases. Since this is a tutorial, we'll just use the first discrete GPU that is available, otherwise the first physical device in the list. We'll be only using standard features, so this should be fine for our purposes[^2]:
+```cpp
+auto findBestPhysicalDevice( const std::vector< vk::PhysicalDevice >& devices ) -> vk::PhysicalDevice
+{
+    assert( !devices.empty() );
 
+    for ( const auto& device : devices )
+    {
+        if ( device.getProperties().deviceType == vk::PhysicalDeviceType::eDiscreteGpu )
+            return device;
+    }
+
+    return devices[ 0 ];
+}
+```
+And of course we have to call it from our main function:
+```cpp
+const auto physicalDevice = findBestPhysicalDevice( physicalDevices );
+std::cout << "\nSelected Device: " << physicalDevice.getProperties().deviceName << "\n";
+```
+That's it, the next step is done: we have selected the physical device that we're going to work with. Our main function is starting to look a bit cluttered again though. So let's wrap the whole physical device creation in a function, just as we did with the instance:
+```cpp
+auto selectPhysicalDevice( const vk::Instance& instance ) -> vk::PhysicalDevice
+{
+    ...
+    return physicalDevice;
+}
+
+int main()
+{
+    try
+    {
+        const auto instance = createVulkanInstance();
+        const auto physicalDevice = selectPhysicalDevice( *instance );
+    }
+    ...
+}
+```
+That's much better I think. Now that we have the physical device selected we need to configure it in a way so that it suits our application's needs. This is what we're going to do in the next episode.
 
 [^1]: The `P` in the function names refers to the fact that the containers contain `const char*` pointers. The corresponding C-style functions are named `setPpEnabledLayerNames` and `setPpEnabledExtensionNames` because they take `const char* const*` as their argument.
+[^2]: Yes, I know, I'm doing the loop over the physical devices and the call to `getProperties` twice. So I'm duplicating code and work here. In this case I think that's okay because it improves the clarity of the code: printing information and selecting the device are two different things. You might want to do those things independently from each other, or you may want to change the implementation of either without affecting the other. So they don't belong in the same function. The performance penalty is also not relevant here, since `cout` calls are several orders of magnitude slower than everything else. But of course you're free to modify the implementation if you have other priorities.

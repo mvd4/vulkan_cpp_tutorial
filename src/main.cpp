@@ -51,20 +51,42 @@ auto printPhysicalDeviceProperties( const vk::PhysicalDevice& device ) -> void
         "\n";
 }
 
+auto findBestPhysicalDevice( const std::vector< vk::PhysicalDevice >& devices ) -> vk::PhysicalDevice
+{
+    assert( !devices.empty() );
+
+    for ( const auto& device : devices )
+    {
+        if ( device.getProperties().deviceType == vk::PhysicalDeviceType::eDiscreteGpu )
+            return device;
+    }
+
+    return devices[ 0 ];
+}
+
+auto selectPhysicalDevice( const vk::Instance& instance ) -> vk::PhysicalDevice
+{
+    const auto physicalDevices = instance.enumeratePhysicalDevices();
+    if ( physicalDevices.empty() )
+        throw std::runtime_error( "No Vulkan devices found" );
+
+    std::cout << "Available physical devices:\n";
+    for ( const auto& d : physicalDevices )
+        printPhysicalDeviceProperties( d );
+
+    const auto physicalDevice = findBestPhysicalDevice( physicalDevices );
+    std::cout << "\nSelected Device: " << physicalDevice.getProperties().deviceName << "\n";
+
+    return physicalDevice;
+}
+
 
 auto main() -> int
 {
     try
     {
         const auto instance = createVulkanInstance();
-
-        const auto physicalDevices = instance->enumeratePhysicalDevices();
-        if ( physicalDevices.empty() )
-            throw std::runtime_error( "No Vulkan devices found" );
-
-        std::cout << "Available physical devices:\n";
-        for ( const auto& d : physicalDevices )
-            printPhysicalDeviceProperties( d );
+        const auto physicalDevice = selectPhysicalDevice( *instance );
     }
     catch( const std::exception& e )
     {
