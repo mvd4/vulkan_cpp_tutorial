@@ -19,7 +19,10 @@ License.
 
 #include <vulkan/vulkan.hpp>
 
-auto main() -> int
+#include <iostream>
+
+
+auto createVulkanInstance() -> vk::UniqueInstance
 {
     const auto appInfo = vk::ApplicationInfo{}
         .setPApplicationName( "Vulkan C++ Tutorial" )
@@ -31,7 +34,20 @@ auto main() -> int
     auto instanceCreateInfo = vk::InstanceCreateInfo{}
         .setPApplicationInfo( &appInfo );
 
-    const auto instance = vk::createInstanceUnique( instanceCreateInfo );
+    return vk::createInstanceUnique( instanceCreateInfo );
+}
 
-    return 0;
+auto main() -> int
+{
+    try
+    {
+        const auto instance = createVulkanInstance();
+    }
+    catch( const std::exception& e )
+    {
+        std::cerr << "Exception thrown: " << e.what() << "\n";
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }
