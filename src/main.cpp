@@ -21,5 +21,17 @@ License.
 
 auto main() -> int
 {
+    const auto appInfo = vk::ApplicationInfo{}
+        .setPApplicationName( "Vulkan C++ Tutorial" )
+        .setApplicationVersion( 1u )
+        .setPEngineName( "Vulkan C++ Tutorial Engine" )
+        .setEngineVersion( 1u )
+        .setApiVersion( VK_API_VERSION_1_1 );
+
+    auto instanceCreateInfo = vk::InstanceCreateInfo{}
+        .setPApplicationInfo( &appInfo );
+
+    const auto instance = vk::createInstanceUnique( instanceCreateInfo );
+
     return 0;
 }
