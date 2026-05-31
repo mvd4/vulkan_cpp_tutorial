@@ -25,6 +25,48 @@ License.
 #include <vector>
 
 
+struct VersionNumber
+{
+    std::uint32_t majorVersion;
+    std::uint32_t minorVersion;
+    std::uint32_t patchVersion;
+};
+
+auto operator<<( std::ostream& os, const VersionNumber& v ) -> std::ostream&
+{
+    os << v.majorVersion << '.' << v.minorVersion << '.' << v.patchVersion;
+    return os;
+}
+
+constexpr auto operator >= ( const VersionNumber& lhs, const VersionNumber& rhs ) -> bool
+{
+    if ( lhs.majorVersion != rhs.majorVersion )
+        return lhs.majorVersion > rhs.majorVersion;
+    if ( lhs.minorVersion != rhs.minorVersion )
+        return lhs.minorVersion > rhs.minorVersion;
+
+    return lhs.patchVersion >= rhs.patchVersion;
+}
+
+constexpr auto getVulkanSDKVersion() -> VersionNumber
+{
+    return VersionNumber{
+        VK_API_VERSION_MAJOR( VK_HEADER_VERSION_COMPLETE ),
+        VK_API_VERSION_MINOR( VK_HEADER_VERSION_COMPLETE ),
+        VK_API_VERSION_PATCH( VK_HEADER_VERSION_COMPLETE )
+    };
+}
+
+constexpr auto isMacOS() -> bool
+{
+    return
+#if defined __MACH__
+        true;
+#else
+        false;
+#endif
+}
+
 auto createVulkanInstance() -> vk::UniqueInstance
 {
     const auto appInfo = vk::ApplicationInfo{}
@@ -36,6 +78,16 @@ auto createVulkanInstance() -> vk::UniqueInstance
 
     auto instanceCreateInfo = vk::InstanceCreateInfo{}
         .setPApplicationInfo( &appInfo );
+
+    // for newer versions of the sdk on macos we have to enable the portability extension
+    auto extensionsToEnable = std::vector< const char* >{};
+    if constexpr ( isMacOS() && getVulkanSDKVersion() >= VersionNumber{ 1, 3, 216 } )
+    {
+        extensionsToEnable.push_back( VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME );
+        instanceCreateInfo.setFlags( vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR );
+    }
+
+    instanceCreateInfo.setPEnabledExtensionNames( extensionsToEnable );
 
     return vk::createInstanceUnique( instanceCreateInfo );
 }
