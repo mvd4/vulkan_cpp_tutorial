@@ -113,6 +113,41 @@ Available instance extensions:
 ```
 Et voilà, there they are: `VK_KHR_surface`, `VK_KHR_win32_surface` and `VK_KHR_surface_protected_capabilities`[^1].
 
+But wait, we're not done yet: in contrast to the layers, a specific device can have its own set of extensions on top of that. And as if that weren't enough already, instance layers can also come with extensions. Since we're currently working with the instance, let's finish that off first.
+
+As it turns out you can pass the name of a layer to `enumerateInstanceExtensionProperties` and that'll give you the extensions for that specific layer. Let's enhance our `printLayerProperties` function accordingly[^2]:
+```cpp
+auto printLayerProperties( const std::vector< vk::LayerProperties >& layers ) -> void
+{
+    for ( const auto& l : layers )
+    {
+        std::cout << "    " << l.layerName << "\n";
+        const auto extensions = vk::enumerateInstanceExtensionProperties( l.layerName.operator std::string() );
+        for ( const auto& e : extensions )
+            std::cout << "       Extension: " << e.extensionName << "\n";
+    }
+
+    std::cout << "\n";
+}
+```
+Indeed, if you run that version you'll see that e.g. the Khronos validation layer comes with three extensions.
+
+Now let's complete our tour by looking at the device specific extensions. For that purpose we extend the `printPhysicalDeviceProperties` function as follows:
+```cpp
+auto printPhysicalDeviceProperties( const vk::PhysicalDevice& device ) -> void
+{
+    ...
+
+    const auto deviceExtensions = device.enumerateDeviceExtensionProperties();
+    std::cout << "\n  Available device extensions: \n";
+    printExtensionProperties( deviceExtensions );
+}
+```
+This is probably going to give you a long list of device specific extensions. Most of them will be irrelevant for this tutorial, but it's good to know how much functionality you could potentially use.
+
+
+
 ---
 
 [^1]: These are the extensions that are present on my Windows system. Obviously you will not have the `...win32...` extension on a macOS or Linux machine but something platform specific.
+[^2]: In case you're wondering about the `l.layerName.operator std::string()`: implicit conversion does not work here due to the templated context. However, calling the conversion operator explicitly via `.operator std::string()` does work.

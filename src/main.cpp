@@ -70,7 +70,12 @@ constexpr auto isMacOS() -> bool
 auto printLayerProperties( const std::vector< vk::LayerProperties >& layers ) -> void
 {
     for ( const auto& l : layers )
+    {
         std::cout << "    " << l.layerName << "\n";
+        const auto extensions = vk::enumerateInstanceExtensionProperties( l.layerName.operator std::string() );
+        for ( const auto& e : extensions )
+            std::cout << "       Extension: " << e.extensionName << "\n";
+    }
 
     std::cout << "\n";
 }
@@ -130,6 +135,10 @@ auto printPhysicalDeviceProperties( const vk::PhysicalDevice& device ) -> void
         "\n      has tessellation shader: " << ( features.tessellationShader ? "yes" : "no" ) <<
         "\n      supports anisotropic filtering: " << ( features.samplerAnisotropy ? "yes" : "no" ) <<
         "\n";
+
+    const auto deviceExtensions = device.enumerateDeviceExtensionProperties();
+    std::cout << "\n  Available device extensions: \n";
+    printExtensionProperties( deviceExtensions );
 }
 
 auto findBestPhysicalDevice( const std::vector< vk::PhysicalDevice >& devices ) -> vk::PhysicalDevice
