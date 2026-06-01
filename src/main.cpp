@@ -67,8 +67,22 @@ constexpr auto isMacOS() -> bool
 #endif
 }
 
+auto printLayerProperties( const std::vector< vk::LayerProperties >& layers ) -> void
+{
+    for ( const auto& l : layers )
+        std::cout << "    " << l.layerName << "\n";
+
+    std::cout << "\n";
+}
+
 auto createVulkanInstance() -> vk::UniqueInstance
 {
+    std::cout << "Vulkan SDK Version: " << getVulkanSDKVersion() << "\n";
+
+    const auto layers = vk::enumerateInstanceLayerProperties();
+    std::cout << "Available instance layers: \n";
+    printLayerProperties( layers );
+
     const auto appInfo = vk::ApplicationInfo{}
         .setPApplicationName( "Vulkan C++ Tutorial" )
         .setApplicationVersion( 1u )
