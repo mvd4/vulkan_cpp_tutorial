@@ -19,9 +19,12 @@ License.
 
 #include <vulkan/vulkan.hpp>
 
+#include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 
@@ -38,7 +41,7 @@ auto operator<<( std::ostream& os, const VersionNumber& v ) -> std::ostream&
     return os;
 }
 
-constexpr auto operator >= ( const VersionNumber& lhs, const VersionNumber& rhs ) -> bool
+constexpr auto operator>=( const VersionNumber& lhs, const VersionNumber& rhs ) -> bool
 {
     if ( lhs.majorVersion != rhs.majorVersion )
         return lhs.majorVersion > rhs.majorVersion;
@@ -146,7 +149,7 @@ auto printPhysicalDeviceProperties( const vk::PhysicalDevice& device ) -> void
         "\n";
 
     const auto deviceExtensions = device.enumerateDeviceExtensionProperties();
-    std::cout << "\n  Available device extensions: \n";
+    std::cout << "\n    Available device extensions: \n";
     printExtensionProperties( deviceExtensions );
 }
 

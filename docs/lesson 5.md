@@ -25,7 +25,7 @@ struct LayerProperties
     ...
 };
 ```
-What I dubbed `string_t` here is actually a `vk::ArrayWrapper1D`, a class that extends `std::array` with some convenience functions for strings. It behaves pretty much like a plain old C-string in many ways, so I think it's clearer to write it that way. The most important property in `LayerProperties` is the `layerName`, as that is what we need to pass to the `InstanceCreateInfo` to turn the layer on.
+What I dubbed `string_t` here is actually a `vk::ArrayWrapper1D`, a class that wraps a fixed-size C-style array and adds some convenience functions for strings. It behaves pretty much like a plain old C-string in many ways, so I think it's clearer to write it that way. The most important property in `LayerProperties` is the `layerName`, as that is what we need to pass to the `InstanceCreateInfo` to turn the layer on.
 
 Okay, so let's list all the layers that are available to us:
 ```cpp
@@ -130,7 +130,7 @@ auto printLayerProperties( const std::vector< vk::LayerProperties >& layers ) ->
     std::cout << "\n";
 }
 ```
-Indeed, if you run that version you'll see that e.g. the Khronos validation layer comes with three extensions.
+Indeed, if you run that version you'll see that e.g. the Khronos validation layer comes with a few extensions of its own (the exact number depends on your SDK version).
 
 Now let's complete our tour by looking at the device specific extensions. For that purpose we extend the `printPhysicalDeviceProperties` function as follows:
 ```cpp
