@@ -145,7 +145,90 @@ auto printPhysicalDeviceProperties( const vk::PhysicalDevice& device ) -> void
 ```
 This is probably going to give you a long list of device specific extensions. Most of them will be irrelevant for this tutorial, but it's good to know how much functionality you could potentially use.
 
+## Enabling Layers and Extensions
+So, now that we know more about layers and extensions, let's make use of some. We actually already did that in lesson 3 where we enabled the portability extension to make this tutorial work on macos. Now you hopefully have a better understanding of what we did there.
 
+As said, one main use case for layers is debugging, so that's what we'll do now as well. Let's extend our instance creation to enable the Khronos debug utilities extension and the validation layer:
+```cpp
+auto createVulkanInstance() -> vk::UniqueInstance
+{
+    ...
+    const auto layersToEnable = std::vector< const char* >{
+        "VK_LAYER_KHRONOS_validation"
+    };
+
+    auto extensionsToEnable = std::vector< const char* >{
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+    };
+
+    auto instanceCreateInfo = vk::InstanceCreateInfo{};
+
+    // for newer versions of the sdk on macos we have to enable the portability extension
+    if constexpr ( isMacOS() && getVulkanSDKVersion() >= VersionNumber{ 1, 3, 216 } )
+    {
+        extensionsToEnable.push_back( VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME );
+        instanceCreateInfo.setFlags( vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR );
+    }
+
+    instanceCreateInfo
+        .setPApplicationInfo( &appInfo )
+        .setPEnabledLayerNames( layersToEnable )
+        .setPEnabledExtensionNames( extensionsToEnable );
+
+    return vk::createInstanceUnique( instanceCreateInfo );
+}
+```
+As you can see, there are constants defined for the names of some extensions (in `vulkan_core.h`), not for the layers though.
+
+If you build and run the program now you might already see the layer in action, depending on the platform you're on. On macos you get a (quite lengthy) error message that tells you that `VK_KHR_portability_subset` must be enabled if the extension is listed in the available device extensions as returned by the call to
+```cpp
+std::vector< vk::ExtensionProperties > vk::PhysicalDevice::enumerateDeviceExtensionProperties()
+```
+
+So it looks like we'll have to enable this extension, but only if it's present. Let's do that by modifying our `createLogicalDevice` function a bit:
+```cpp
+auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> vk::UniqueDevice
+{
+    ...
+    const auto enabledDeviceExtensions = getRequiredDeviceExtensions(
+        physicalDevice.enumerateDeviceExtensionProperties()
+    );
+    const auto deviceCreateInfo = vk::DeviceCreateInfo{}
+        .setQueueCreateInfos( queueCreateInfos )
+        .setPEnabledExtensionNames( enabledDeviceExtensions );
+
+    return physicalDevice.createDeviceUnique( deviceCreateInfo );
+}
+```
+with
+```cpp
+auto getRequiredDeviceExtensions(
+    const std::vector< vk::ExtensionProperties >& availableExtensions
+) -> std::vector< const char* >
+{
+    // extension name strings need to be static, because we're returning a vector with pointers to the underlying char arrays
+    static const std::string compatibilityExtensionName = "VK_KHR_portability_subset";
+
+    auto result = std::vector< const char* >{};
+
+    const auto it = std::find_if(
+        availableExtensions.begin(),
+        availableExtensions.end(),
+        []( const vk::ExtensionProperties& e )
+        {
+            return compatibilityExtensionName == e.extensionName;
+        }
+    );
+
+    if ( it != availableExtensions.end() )
+        result.push_back( compatibilityExtensionName.c_str() );
+
+    return result;
+}
+```
+If you run the program again now, that validation message should no longer be displayed.
+
+Cool, that's it for now for layers and extensions. Next time we'll start to implement our first pipeline.
 
 ---
 

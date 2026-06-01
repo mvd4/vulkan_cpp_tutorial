@@ -107,18 +107,27 @@ auto createVulkanInstance() -> vk::UniqueInstance
         .setEngineVersion( 1u )
         .setApiVersion( VK_API_VERSION_1_1 );
 
-    auto instanceCreateInfo = vk::InstanceCreateInfo{}
-        .setPApplicationInfo( &appInfo );
+    const auto layersToEnable = std::vector< const char* >{
+        "VK_LAYER_KHRONOS_validation"
+    };
+
+    auto extensionsToEnable = std::vector< const char* >{
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+    };
+
+    auto instanceCreateInfo = vk::InstanceCreateInfo{};
 
     // for newer versions of the sdk on macos we have to enable the portability extension
-    auto extensionsToEnable = std::vector< const char* >{};
     if constexpr ( isMacOS() && getVulkanSDKVersion() >= VersionNumber{ 1, 3, 216 } )
     {
         extensionsToEnable.push_back( VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME );
         instanceCreateInfo.setFlags( vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR );
     }
 
-    instanceCreateInfo.setPEnabledExtensionNames( extensionsToEnable );
+    instanceCreateInfo
+        .setPApplicationInfo( &appInfo )
+        .setPEnabledLayerNames( layersToEnable )
+        .setPEnabledExtensionNames( extensionsToEnable );
 
     return vk::createInstanceUnique( instanceCreateInfo );
 }
@@ -197,6 +206,30 @@ auto findSuitableQueueFamily(
     throw std::runtime_error( "No suitable queue family found" );
 }
 
+auto getRequiredDeviceExtensions(
+    const std::vector< vk::ExtensionProperties >& availableExtensions
+) -> std::vector< const char* >
+{
+    // extension name strings need to be static, because we're returning a vector with pointers to the underlying char arrays
+    static const std::string compatibilityExtensionName = "VK_KHR_portability_subset";
+
+    auto result = std::vector< const char* >{};
+
+    const auto it = std::find_if(
+        availableExtensions.begin(),
+        availableExtensions.end(),
+        []( const vk::ExtensionProperties& e )
+        {
+            return compatibilityExtensionName == e.extensionName;
+        }
+    );
+
+    if ( it != availableExtensions.end() )
+        result.push_back( compatibilityExtensionName.c_str() );
+
+    return result;
+}
+
 auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> vk::UniqueDevice
 {
     const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
@@ -222,8 +255,12 @@ auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> vk::Uniq
             .setQueuePriorities( queuePriority )
     };
 
+    const auto enabledDeviceExtensions = getRequiredDeviceExtensions(
+        physicalDevice.enumerateDeviceExtensionProperties()
+    );
     const auto deviceCreateInfo = vk::DeviceCreateInfo{}
-        .setQueueCreateInfos( queueCreateInfos );
+        .setQueueCreateInfos( queueCreateInfos )
+        .setPEnabledExtensionNames( enabledDeviceExtensions );
 
     return physicalDevice.createDeviceUnique( deviceCreateInfo );
 }
