@@ -62,4 +62,57 @@ Available instance layers:
 ```
 In this example the NVIDIA Optimus layer is available on the system, along with some by the Khronos Group (the industry consortium that created the Vulkan standard) and some by LunarG (the company that maintains the official Vulkan SDK).
 
-So far, so good.
+So far, so good. We'll get back to some of those layers in a minute. Let's look at extensions first (as said, device-specific layers have been deprecated, so we'll not cover them here).
+
+## Extensions
+In contrast to layers, extensions can actually add new functionality to Vulkan. Many of those extensions will only become relevant for you once you start exploring more advanced stuff. Still, there is one family of extensions that is widely used and that we will need in this tutorial as well: the Khronos surface extensions. We'll be talking about surfaces in depth when we get to the graphics stuff. But let me give you a quick intro here:
+
+One of the main design principles for Vulkan is its platform-independence. There's nothing in the Vulkan core that is specific to one platform. Drawing onto a screen on the other hand is extremely platform specific, especially in a windowed context. Obviously the drawing functionality can not go into the Vulkan core, therefore it is realized by platform-specific extensions.
+
+But first things first, let's now have a look which extensions we actually have available. The pattern is the same as the one for layers:
+```cpp
+...
+auto printExtensionProperties( const std::vector< vk::ExtensionProperties >& extensions ) -> void
+{
+    for ( const auto& e : extensions )
+        std::cout << "    " << e.extensionName << "\n";
+
+    std::cout << "\n";
+}
+...
+auto createVulkanInstance() -> vk::UniqueInstance
+{
+    ...
+
+    const auto layers = vk::enumerateInstanceLayerProperties();
+    std::cout << "Available instance layers: \n";
+    printLayerProperties( layers );
+
+    const auto instanceExtensions = vk::enumerateInstanceExtensionProperties();
+    std::cout << "Available instance extensions: \n";
+    printExtensionProperties( instanceExtensions );
+
+    ...
+```
+If you run now, you'll hopefully see output along the lines of the following:
+```text
+Available instance extensions:
+    VK_KHR_device_group_creation
+    VK_KHR_external_fence_capabilities
+    VK_KHR_external_memory_capabilities
+    VK_KHR_external_semaphore_capabilities
+    VK_KHR_get_physical_device_properties2
+    VK_KHR_get_surface_capabilities2
+    VK_KHR_surface
+    VK_KHR_surface_protected_capabilities
+    VK_KHR_win32_surface
+    VK_EXT_debug_report
+    VK_EXT_debug_utils
+    VK_EXT_swapchain_colorspace
+    VK_NV_external_memory_capabilities
+```
+Et voilà, there they are: `VK_KHR_surface`, `VK_KHR_win32_surface` and `VK_KHR_surface_protected_capabilities`[^1].
+
+---
+
+[^1]: These are the extensions that are present on my Windows system. Obviously you will not have the `...win32...` extension on a macOS or Linux machine but something platform specific.

@@ -75,6 +75,14 @@ auto printLayerProperties( const std::vector< vk::LayerProperties >& layers ) ->
     std::cout << "\n";
 }
 
+auto printExtensionProperties( const std::vector< vk::ExtensionProperties >& extensions ) -> void
+{
+    for ( const auto& e : extensions )
+        std::cout << "    " << e.extensionName << "\n";
+
+    std::cout << "\n";
+}
+
 auto createVulkanInstance() -> vk::UniqueInstance
 {
     std::cout << "Vulkan SDK Version: " << getVulkanSDKVersion() << "\n";
@@ -82,6 +90,10 @@ auto createVulkanInstance() -> vk::UniqueInstance
     const auto layers = vk::enumerateInstanceLayerProperties();
     std::cout << "Available instance layers: \n";
     printLayerProperties( layers );
+
+    const auto instanceExtensions = vk::enumerateInstanceExtensionProperties();
+    std::cout << "Available instance extensions: \n";
+    printExtensionProperties( instanceExtensions );
 
     const auto appInfo = vk::ApplicationInfo{}
         .setPApplicationName( "Vulkan C++ Tutorial" )
