@@ -269,7 +269,31 @@ auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> vk::Uniq
     return physicalDevice.createDeviceUnique( deviceCreateInfo );
 }
 
-auto createGPUBuffer( const vk::Device& logicalDevice, std::uint64_t size ) -> vk::UniqueBuffer
+auto findSuitableMemoryIndex(
+    const vk::PhysicalDeviceMemoryProperties& memoryProperties,
+    std::uint32_t allowedTypesMask,
+    vk::MemoryPropertyFlags requiredMemoryFlags
+) -> std::uint32_t
+{
+    for(
+        std::uint32_t memoryType = 1, i = 0;
+        i < memoryProperties.memoryTypeCount;
+        ++i, memoryType <<= 1
+    )
+    {
+        if(
+            ( allowedTypesMask & memoryType ) > 0 &&
+            ( ( memoryProperties.memoryTypes[i].propertyFlags & requiredMemoryFlags ) == requiredMemoryFlags )
+        )
+        {
+            return i;
+        }
+    }
+
+    throw std::runtime_error( "could not find suitable gpu memory" );
+}
+
+auto createGPUBuffer( const vk::Device& logicalDevice, vk::DeviceSize size ) -> vk::UniqueBuffer
 {
     const auto bufferCreateInfo = vk::BufferCreateInfo{}
         .setSize( size )
@@ -296,6 +320,22 @@ auto main() -> int
 
         const auto inputBuffer = createGPUBuffer( *logicalDevice, sizeof( inputData ) );
         const auto outputBuffer = createGPUBuffer( *logicalDevice, sizeof( outputData ) );
+
+        const auto memoryRequirements = logicalDevice->getBufferMemoryRequirements( *inputBuffer );
+        const auto memoryProperties = physicalDevice.getMemoryProperties();
+        const auto requiredMemoryFlags =
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+
+        const auto memoryIndex = findSuitableMemoryIndex(
+            memoryProperties,
+            memoryRequirements.memoryTypeBits,
+            requiredMemoryFlags );
+
+        const auto allocateInfo = vk::MemoryAllocateInfo{}
+            .setAllocationSize( memoryRequirements.size )
+            .setMemoryTypeIndex( memoryIndex );
+
+        auto memory = logicalDevice->allocateMemoryUnique( allocateInfo );
     }
     catch( const std::exception& e )
     {

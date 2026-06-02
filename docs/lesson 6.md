@@ -82,3 +82,202 @@ auto createGPUBuffer( const vk::Device& logicalDevice, std::uint64_t size ) -> v
 const auto inputBuffer = createGPUBuffer( *logicalDevice, sizeof( inputData ) );
 const auto outputBuffer = createGPUBuffer( *logicalDevice, sizeof( outputData ) );
 ```
+
+Cool, we have the GPU buffers, now we would like to copy our input data from main memory to the GPU buffer. How do we do that?
+
+The standard way to copy blocks of raw memory in C++ is still the good old `memcpy` function, if we had a pointer to the GPU memory we could use that. But how would we obtain such a pointer?
+
+Well, a bit of searching yields a function that somehow seems to do what we want:
+```cpp
+class Device
+{
+    ...
+    void* mapMemory( DeviceMemory memory, DeviceSize offset, DeviceSize size, ... ) const;
+    ...
+};
+```
+The documentation for the corresponding C-function says this function is used to "Map a memory object into application address space" and it's result is a "host-accessible pointer to the beginning of the mapped range". So we should be able to use this pointer as the destination for memcpy.
+Sounds great, and the parameters `offset` and `size` are self-explanatory enough. But what is the `DeviceMemory`? We have a `Buffer`, is that the same? Probably not, otherwise it wouldn't be two types. But what is it then?
+
+
+## Allocating device memory
+The answer is that Vulkan separates the management of the actual memory from its semantic meaning, i.e. from how it is used. This separation enables optimization techniques like allocating a big block of memory and updating it as a whole, but actually using different parts of it for different resources.
+So actually our diagram from above becomes a bit more accurate if we modify it like this:
+
+![Compute Pipeline - Refined Data Flow](images/Compute_Pipeline_2.png "Fig. 2: Compute Pipeline - Refined Data Flow")
+
+Long story short: we need to explicitly allocate the memory and then attach it to the buffer. The way to do the allocation is with the following function:
+```cpp
+class Device
+{
+    ...
+    UniqueDeviceMemory allocateMemoryUnique( const MemoryAllocateInfo& allocateInfo_, ... );
+    ...
+};
+```
+and the `allocateInfo_` interface looks like this
+```cpp
+struct MemoryAllocateInfo
+{
+    ...
+    MemoryAllocateInfo& setAllocationSize( vk::DeviceSize allocationSize_ );
+    MemoryAllocateInfo& setMemoryTypeIndex( uint32_t memoryTypeIndex_ );
+    ...
+};
+```
+So we need the allocation size - fair enough, that was to be expected. But now what the heck is the memory type index? I mean, we just want to allocate a block of memory, how complicated can that be?
+
+Now, GPU memory management in Vulkan is indeed a bit more involved than the memory model we're used to, and the reason is - as so often - enabling performance optimizations. Higher level APIs such as OpenGL or DirectX 11 take care of managing device memory under the hood, but this comes at a cost: the driver implementation basically has to guess how an application intends to use its resources. Will it create another fifty texture images just like the one it just did? Will that big block of memory be accessed from the host over and over again or will the data just sit there and be read by the GPU? Is the application going to destroy resources explicitly once they are not used anymore? It is obviously impossible for a driver to always guess correctly. Chances are therefore that the performance of many applications will not be as good as it could.
+
+Vulkan on the other hand requires us to manage device memory ourselves and be explicit about how we want to use it. For that purpose it introduces the concepts of memory heaps and memory types. Memory heaps are representations of the actual physical types of memory available (e.g. the GPU V-Ram or the host's main memory), whereas memory types are a virtual construct on top that describes how the respective memory can be used (some details to follow below).
+
+So, to be able to determine the memory type index we need, we first need a list of available memory types and their properties. This we can obtain with the following function:
+```cpp
+class PhysicalDevice
+{
+    ...
+    PhysicalDeviceMemoryProperties getMemoryProperties();
+    ...
+};
+```
+And the returned structure looks like this
+```cpp
+struct PhysicalDeviceMemoryProperties
+{
+    ...
+    uint32_t memoryTypeCount;
+    container_t< MemoryType > memoryTypes;
+    uint32_t memoryHeapCount;
+    container_t< MemoryHeap > memoryHeaps;
+    ...
+};
+```
+As we can see it contains a list of the available memory types. The index we are looking for is an index into that container. The structure also contains a list of the available memory heaps, but since each memory type references its corresponding heap we don't need to care about those.
+
+The `MemoryType` struct looks like this:
+```cpp
+struct MemoryType
+{
+    ...
+    MemoryPropertyFlags propertyFlags;
+    uint32_t heapIndex;
+    ...
+};
+```
+As you probably guessed, the `propertyFlags` denote the properties of the respective memory type. I won't go into the meaning of all flags here, at this point only the first three are relevant for us:
+- `eDeviceLocal` means that the memory is physically connected to the GPU
+- `eHostVisible` means that the host can access the memory directly
+- `eHostCoherent` means that host and device always 'see' the memory in the same state, i.e. there are no pending cache flushes etc from either side.
+
+As said before, the `heapIndex` denotes the heap this memory type is based off.
+
+That is all well and good, but we still have no clue how to select the correct memory type. Luckily the logical device knows which requirements our buffer has on the memory it is willing to work with:
+```cpp
+class Device
+{
+    ...
+    vk::MemoryRequirements getBufferMemoryRequirements( vk::Buffer, ... );
+    ...
+};
+```
+The `MemoryRequirements` struct looks like this:
+```cpp
+struct MemoryRequirements
+{
+    ...
+
+    vk::DeviceSize size;
+    vk::DeviceSize alignment;
+    uint32_t memoryTypeBits;
+    ...
+};
+```
+`size` should be self-explanatory. The `alignment` requirements matter when sub-allocating multiple resources from a single larger memory block. Since we're allocating memory individually per buffer here, the alignment is automatically satisfied and we can ignore it for now.
+
+The most interesting field for us right now is the `memoryTypeBits`. This one is telling us is which memory indices are acceptable from the buffer's perspective. It's a bitfield, i.e. if the memory type at index 0 is suitable, the rightmost bit (the "1 bit") of `memoryTypeBits` will be set. If the type at index 1 is suitable, the next bit (the "2 bit") will be set and so on. Here's an example illustration where memory types 0 and 2 do meet the memory requirements.
+
+![Memory Requirements Example](images/Memory_Types.png "Fig. 3: Memory Requirements Example")
+
+That means we can cycle through the list of available memory types and see which ones are suitable for our input buffer like so:
+```cpp
+const auto memoryRequirements = logicalDevice->getBufferMemoryRequirements( *inputBuffer );
+const auto memoryProperties = physicalDevice.getMemoryProperties();
+for(
+    std::uint32_t memoryType = 1, i = 0;
+    i < memoryProperties.memoryTypeCount;
+    ++i, memoryType <<= 1
+)
+{
+    if( ( memoryRequirements.memoryTypeBits & memoryType ) > 0 )
+    {
+        // found a suitable memory type
+    }
+}
+```
+But wait, it seems there might be multiple memory types that fit the buffer requirements. Otherwise the structure wouldn't need a bitmask, a simple index would do. But if we still have more than one possible memory type, which one do we select?
+
+Well, the buffer is not the only one that has requirements on the memory. We ourselves have requirements, too. We want to copy data to that memory from our main memory and this is not possible for all types of GPU memory. In terms of the `MemoryPropertyFlags` described above that means that we want the memory to be `eHostVisible` and `eHostCoherent`. So let's add our requirements to the selection of the memory index:
+```cpp
+const auto memoryRequirements = logicalDevice->getBufferMemoryRequirements( *inputBuffer );
+const auto memoryProperties = physicalDevice.getMemoryProperties();
+const auto requiredMemoryFlags = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+for(
+    std::uint32_t memoryType = 1, i = 0;
+    i < memoryProperties.memoryTypeCount;
+    ++i, memoryType <<= 1
+)
+{
+    if(
+        ( memoryRequirements.memoryTypeBits & memoryType ) > 0 &&
+        ( ( memoryProperties.memoryTypes[i].propertyFlags & requiredMemoryFlags ) == requiredMemoryFlags )
+    )
+    {
+        // found a suitable memory type
+    }
+}
+```
+So we in principle do have the correct memory index right now, only that the code does look a bit messier than I'd like it to. I'll therefore refactor the index retrieval into a utility function:
+```cpp
+auto findSuitableMemoryIndex(
+    const vk::PhysicalDeviceMemoryProperties& memoryProperties,
+    std::uint32_t allowedTypesMask,
+    vk::MemoryPropertyFlags requiredMemoryFlags
+) -> std::uint32_t
+{
+    for(
+        std::uint32_t memoryType = 1, i = 0;
+        i < memoryProperties.memoryTypeCount;
+        ++i, memoryType <<= 1
+    )
+    {
+        if(
+            ( allowedTypesMask & memoryType ) > 0 &&
+            ( ( memoryProperties.memoryTypes[i].propertyFlags & requiredMemoryFlags ) == requiredMemoryFlags )
+        )
+        {
+            return i;
+        }
+    }
+
+    throw std::runtime_error( "could not find suitable gpu memory" );
+}
+```
+... and call it when we do the memory allocation:
+```cpp
+const auto memoryIndex = findSuitableMemoryIndex(
+    memoryProperties,
+    memoryRequirements.memoryTypeBits,
+    requiredMemoryFlags );
+
+const auto allocateInfo = vk::MemoryAllocateInfo{}
+    .setAllocationSize( memoryRequirements.size )
+    .setMemoryTypeIndex( memoryIndex );
+
+auto memory = logicalDevice->allocateMemoryUnique( allocateInfo );
+```
+Make sure to use the allocation size that is returned in the memory requirements, as that might differ from the size of your data[^1].
+
+
+---
+
+[^1]: e.g. because the driver needs some space to store meta information for the buffer
