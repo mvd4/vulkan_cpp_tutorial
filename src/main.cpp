@@ -23,6 +23,7 @@ License.
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -268,6 +269,16 @@ auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> vk::Uniq
     return physicalDevice.createDeviceUnique( deviceCreateInfo );
 }
 
+auto createGPUBuffer( const vk::Device& logicalDevice, std::uint64_t size ) -> vk::UniqueBuffer
+{
+    const auto bufferCreateInfo = vk::BufferCreateInfo{}
+        .setSize( size )
+        .setUsage( vk::BufferUsageFlagBits::eStorageBuffer )
+        .setSharingMode( vk::SharingMode::eExclusive );
+
+    return logicalDevice.createBufferUnique( bufferCreateInfo );
+}
+
 
 auto main() -> int
 {
@@ -276,6 +287,15 @@ auto main() -> int
         const auto instance = createVulkanInstance();
         const auto physicalDevice = selectPhysicalDevice( *instance );
         const auto logicalDevice = createLogicalDevice( physicalDevice );
+
+        constexpr size_t numElements = 500;
+        auto inputData = std::array< int, numElements >{};
+        std::iota( inputData.begin(), inputData.end(), 0 );
+
+        auto outputData = std::array< float, numElements >{};
+
+        const auto inputBuffer = createGPUBuffer( *logicalDevice, sizeof( inputData ) );
+        const auto outputBuffer = createGPUBuffer( *logicalDevice, sizeof( outputData ) );
     }
     catch( const std::exception& e )
     {
