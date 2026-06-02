@@ -277,7 +277,78 @@ auto memory = logicalDevice->allocateMemoryUnique( allocateInfo );
 ```
 Make sure to use the allocation size that is returned in the memory requirements, as that might differ from the size of your data[^1].
 
+## Mapping GPU memory and binding it to the buffer
+With the memory being allocated we can now finally map the memory and copy our data into it:
+```cpp
+const auto mappedInputMemory = logicalDevice->mapMemory( *memory, 0, sizeof( inputData ) );
+std::memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
+logicalDevice->unmapMemory( *memory );
+```
+Note that we don't need to do anything special after the copy besides unmapping. Because we chose a host coherent memory type, our writes are automatically visible to the GPU without an explicit flush (which we would otherwise have to do via `vkFlushMappedMemoryRanges`).
+Nice, but we're not fully done yet. We do have our data in GPU memory, but unfortunately our buffer doesn't know about that memory yet. Let's tell it:
+```cpp
+logicalDevice->bindBufferMemory( *inputBuffer, *memory, 0u );
+```
+Phew, that was much more work than expected, right? But at last we have our data in GPU memory. We'd now have to do pretty much the same again for the output buffer. However, since we'll use buffer and memory always together in this tutorial[^2], I'll instead extend the `createGPUBuffer` function and do all the allocation and binding in there:
+```cpp
+struct GPUBuffer
+{
+    vk::UniqueBuffer buffer;
+    vk::UniqueDeviceMemory memory;
+};
+
+auto createGPUBuffer( const vk::PhysicalDevice& physicalDevice, const vk::Device& logicalDevice, std::uint64_t size ) -> GPUBuffer
+{
+    const auto bufferCreateInfo = vk::BufferCreateInfo{}
+        .setSize( size )
+        .setUsage( vk::BufferUsageFlagBits::eStorageBuffer )
+        .setSharingMode( vk::SharingMode::eExclusive );
+    auto buffer = logicalDevice.createBufferUnique( bufferCreateInfo );
+
+    const auto memoryRequirements = logicalDevice.getBufferMemoryRequirements( *buffer );
+    const auto memoryProperties = physicalDevice.getMemoryProperties();
+    const auto requiredMemoryFlags =
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+
+    const auto memoryIndex = findSuitableMemoryIndex(
+        memoryProperties,
+        memoryRequirements.memoryTypeBits,
+        requiredMemoryFlags );
+
+    const auto allocateInfo = vk::MemoryAllocateInfo{}
+        .setAllocationSize( memoryRequirements.size )
+        .setMemoryTypeIndex( memoryIndex );
+
+    auto memory = logicalDevice.allocateMemoryUnique( allocateInfo );
+
+    logicalDevice.bindBufferMemory( *buffer, *memory, 0u );
+
+    return { std::move( buffer ), std::move( memory ) };
+}
+```
+Note that `bindBufferMemory` is now called inside `createGPUBuffer`, which means the memory is bound to its buffer *before* we call `mapMemory` in `main`. This is the reverse of the intermediate code above, where we mapped first and bound afterwards. Both orderings are valid in Vulkan — `vkMapMemory` operates on a `DeviceMemory` object independently of whether it is bound to a buffer, and the only hard requirement is that memory is bound before the buffer is used in a command. Binding before mapping is the more natural order, however, so that is what the refactored function uses.
+
+... and that simplifies the code in `main` to:
+```cpp
+...
+const auto inputBuffer = createGPUBuffer( physicalDevice, *logicalDevice, sizeof( inputData ) );
+const auto outputBuffer = createGPUBuffer( physicalDevice, *logicalDevice, sizeof( outputData ) );
+
+const auto mappedInputMemory = logicalDevice->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
+std::memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
+logicalDevice->unmapMemory( *inputBuffer.memory );
+...
+```
+Note that we don't do any mapping or copying for the output buffer as there is no relevant data in that one yet.
+
+That has been quite a big chunk of work this time. Now that we have our input data in GPU memory we can start to think about what we actually want to do with it, and that's what we're going to do in the next lesson.
 
 ---
 
 [^1]: e.g. because the driver needs some space to store meta information for the buffer
+[^2]: Note that it is considered bad practice to allocate individual chunks of memory for each resource because of the performance impact. We'll do that here for clarity and to get things working as quickly as possible. Once you're more familiar with the workings of memory management you should definitely look at backing many resources with a common buffer.
+
+Further reading:
+
+https://gpuopen.com/learn/vulkan-device-memory/
+https://developer.nvidia.com/vulkan-memory-management

@@ -52,6 +52,13 @@ constexpr auto operator>=( const VersionNumber& lhs, const VersionNumber& rhs ) 
     return lhs.patchVersion >= rhs.patchVersion;
 }
 
+struct GPUBuffer
+{
+    vk::UniqueBuffer buffer;
+    vk::UniqueDeviceMemory memory;
+};
+
+
 constexpr auto getVulkanSDKVersion() -> VersionNumber
 {
     return VersionNumber{
@@ -293,14 +300,37 @@ auto findSuitableMemoryIndex(
     throw std::runtime_error( "could not find suitable gpu memory" );
 }
 
-auto createGPUBuffer( const vk::Device& logicalDevice, vk::DeviceSize size ) -> vk::UniqueBuffer
+auto createGPUBuffer(
+    const vk::PhysicalDevice& physicalDevice,
+    const vk::Device& logicalDevice,
+    vk::DeviceSize size
+) -> GPUBuffer
 {
     const auto bufferCreateInfo = vk::BufferCreateInfo{}
         .setSize( size )
         .setUsage( vk::BufferUsageFlagBits::eStorageBuffer )
         .setSharingMode( vk::SharingMode::eExclusive );
+    auto buffer = logicalDevice.createBufferUnique( bufferCreateInfo );
 
-    return logicalDevice.createBufferUnique( bufferCreateInfo );
+    const auto memoryRequirements = logicalDevice.getBufferMemoryRequirements( *buffer );
+    const auto memoryProperties = physicalDevice.getMemoryProperties();
+    const auto requiredMemoryFlags =
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+
+    const auto memoryIndex = findSuitableMemoryIndex(
+        memoryProperties,
+        memoryRequirements.memoryTypeBits,
+        requiredMemoryFlags );
+
+    const auto allocateInfo = vk::MemoryAllocateInfo{}
+        .setAllocationSize( memoryRequirements.size )
+        .setMemoryTypeIndex( memoryIndex );
+
+    auto memory = logicalDevice.allocateMemoryUnique( allocateInfo );
+
+    logicalDevice.bindBufferMemory( *buffer, *memory, 0u );
+
+    return { std::move( buffer ), std::move( memory ) };
 }
 
 
@@ -318,24 +348,12 @@ auto main() -> int
 
         auto outputData = std::array< float, numElements >{};
 
-        const auto inputBuffer = createGPUBuffer( *logicalDevice, sizeof( inputData ) );
-        const auto outputBuffer = createGPUBuffer( *logicalDevice, sizeof( outputData ) );
+        const auto inputBuffer = createGPUBuffer( physicalDevice, *logicalDevice, sizeof( inputData ) );
+        const auto outputBuffer = createGPUBuffer( physicalDevice, *logicalDevice, sizeof( outputData ) );
 
-        const auto memoryRequirements = logicalDevice->getBufferMemoryRequirements( *inputBuffer );
-        const auto memoryProperties = physicalDevice.getMemoryProperties();
-        const auto requiredMemoryFlags =
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-
-        const auto memoryIndex = findSuitableMemoryIndex(
-            memoryProperties,
-            memoryRequirements.memoryTypeBits,
-            requiredMemoryFlags );
-
-        const auto allocateInfo = vk::MemoryAllocateInfo{}
-            .setAllocationSize( memoryRequirements.size )
-            .setMemoryTypeIndex( memoryIndex );
-
-        auto memory = logicalDevice->allocateMemoryUnique( allocateInfo );
+        const auto mappedInputMemory = logicalDevice->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
+        std::memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
+        logicalDevice->unmapMemory( *inputBuffer.memory );
     }
     catch( const std::exception& e )
     {
