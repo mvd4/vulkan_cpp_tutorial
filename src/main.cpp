@@ -20,8 +20,10 @@ License.
 #include <vulkan/vulkan.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <numeric>
 #include <stdexcept>
@@ -290,7 +292,7 @@ auto findSuitableMemoryIndex(
     {
         if(
             ( allowedTypesMask & memoryType ) > 0 &&
-            ( ( memoryProperties.memoryTypes[i].propertyFlags & requiredMemoryFlags ) == requiredMemoryFlags )
+            ( ( memoryProperties.memoryTypes[ i ].propertyFlags & requiredMemoryFlags ) == requiredMemoryFlags )
         )
         {
             return i;

@@ -67,7 +67,7 @@ auto inputBuffer = logicalDevice->createBufferUnique( inputBufferCreateInfo );
 ```
 We now could copy that code to create the output buffer, but that would be an unnecessary duplication I'd say. Let's instead package it into a utility function.
 ```cpp
-auto createGPUBuffer( const vk::Device& logicalDevice, std::uint64_t size ) -> vk::UniqueBuffer
+auto createGPUBuffer( const vk::Device& logicalDevice, vk::DeviceSize size ) -> vk::UniqueBuffer
 {
     const auto bufferCreateInfo = vk::BufferCreateInfo{}
         .setSize( size )
@@ -96,7 +96,7 @@ class Device
     ...
 };
 ```
-The documentation for the corresponding C-function says this function is used to "Map a memory object into application address space" and it's result is a "host-accessible pointer to the beginning of the mapped range". So we should be able to use this pointer as the destination for memcpy.
+The documentation for the corresponding C-function says this function is used to "Map a memory object into application address space" and its result is a "host-accessible pointer to the beginning of the mapped range". So we should be able to use this pointer as the destination for memcpy.
 Sounds great, and the parameters `offset` and `size` are self-explanatory enough. But what is the `DeviceMemory`? We have a `Buffer`, is that the same? Probably not, otherwise it wouldn't be two types. But what is it then?
 
 
@@ -169,7 +169,7 @@ As you probably guessed, the `propertyFlags` denote the properties of the respec
 - `eHostVisible` means that the host can access the memory directly
 - `eHostCoherent` means that host and device always 'see' the memory in the same state, i.e. there are no pending cache flushes etc from either side.
 
-As said before, the `heapIndex` denotes the heap this memory type is based off.
+As said before, the `heapIndex` denotes the heap this memory type is based on.
 
 That is all well and good, but we still have no clue how to select the correct memory type. Luckily the logical device knows which requirements our buffer has on the memory it is willing to work with:
 ```cpp
@@ -194,7 +194,7 @@ struct MemoryRequirements
 ```
 `size` should be self-explanatory. The `alignment` requirements matter when sub-allocating multiple resources from a single larger memory block. Since we're allocating memory individually per buffer here, the alignment is automatically satisfied and we can ignore it for now.
 
-The most interesting field for us right now is the `memoryTypeBits`. This one is telling us is which memory indices are acceptable from the buffer's perspective. It's a bitfield, i.e. if the memory type at index 0 is suitable, the rightmost bit (the "1 bit") of `memoryTypeBits` will be set. If the type at index 1 is suitable, the next bit (the "2 bit") will be set and so on. Here's an example illustration where memory types 0 and 2 do meet the memory requirements.
+The most interesting field for us right now is the `memoryTypeBits`. This one is telling us which memory indices are acceptable from the buffer's perspective. It's a bitfield, i.e. if the memory type at index 0 is suitable, the rightmost bit (the "1 bit") of `memoryTypeBits` will be set. If the type at index 1 is suitable, the next bit (the "2 bit") will be set and so on. Here's an example illustration where memory types 0 and 2 do meet the memory requirements.
 
 ![Memory Requirements Example](images/Memory_Types.png "Fig. 3: Memory Requirements Example")
 
@@ -229,7 +229,7 @@ for(
 {
     if(
         ( memoryRequirements.memoryTypeBits & memoryType ) > 0 &&
-        ( ( memoryProperties.memoryTypes[i].propertyFlags & requiredMemoryFlags ) == requiredMemoryFlags )
+        ( ( memoryProperties.memoryTypes[ i ].propertyFlags & requiredMemoryFlags ) == requiredMemoryFlags )
     )
     {
         // found a suitable memory type
@@ -252,7 +252,7 @@ auto findSuitableMemoryIndex(
     {
         if(
             ( allowedTypesMask & memoryType ) > 0 &&
-            ( ( memoryProperties.memoryTypes[i].propertyFlags & requiredMemoryFlags ) == requiredMemoryFlags )
+            ( ( memoryProperties.memoryTypes[ i ].propertyFlags & requiredMemoryFlags ) == requiredMemoryFlags )
         )
         {
             return i;
@@ -297,7 +297,7 @@ struct GPUBuffer
     vk::UniqueDeviceMemory memory;
 };
 
-auto createGPUBuffer( const vk::PhysicalDevice& physicalDevice, const vk::Device& logicalDevice, std::uint64_t size ) -> GPUBuffer
+auto createGPUBuffer( const vk::PhysicalDevice& physicalDevice, const vk::Device& logicalDevice, vk::DeviceSize size ) -> GPUBuffer
 {
     const auto bufferCreateInfo = vk::BufferCreateInfo{}
         .setSize( size )
@@ -350,5 +350,5 @@ That has been quite a big chunk of work this time. Now that we have our input da
 
 Further reading:
 
-https://gpuopen.com/learn/vulkan-device-memory/
-https://developer.nvidia.com/vulkan-memory-management
+- [Vulkan Device Memory (GPUOpen)](https://gpuopen.com/learn/vulkan-device-memory/)
+- [Vulkan Memory Management (NVIDIA)](https://developer.nvidia.com/vulkan-memory-management)
