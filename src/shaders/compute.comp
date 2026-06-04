@@ -1,5 +1,17 @@
 #version 450
 
+layout( local_size_x = 64 ) in;
+
+const uint BUFFER_SIZE = 500;  // must match numElements in main.cpp
+
+int inputBuffer[BUFFER_SIZE];
+float outputBuffer[BUFFER_SIZE];
+
 void main()
 {
+    uint processingIndex = gl_GlobalInvocationID.x;
+    if ( processingIndex >= BUFFER_SIZE )
+        return;
+
+    outputBuffer[ processingIndex ] = inputBuffer[ processingIndex ] * 4.2;
 }
