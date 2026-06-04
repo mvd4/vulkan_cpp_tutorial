@@ -1,6 +1,6 @@
 set( TARGET_NAME vulkan-cpp-tutorial )
 
-find_package( Vulkan REQUIRED )
+find_package( Vulkan REQUIRED COMPONENTS glslc )
 
 add_executable( ${TARGET_NAME} main.cpp )
 

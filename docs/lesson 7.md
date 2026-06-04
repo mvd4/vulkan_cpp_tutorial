@@ -28,7 +28,7 @@ The GLSL to SPIR-V compiler that comes with the Vulkan SDK is located in its `bi
 ```
 So let's compile our minimal shader from above. Create a folder `shaders` in the `src` directory. In that folder create a text file named `compute.comp`[^2] and paste the above code into the file. Then create a folder `shaders` inside your build configuration output directory (e.g. `build/bin/Debug/`) and finally run this command[^3]:
 ```shell
-$ glslc src/shaders/compute.comp -o build/bin/Debug/shaders/compute.comp.spv
+> glslc src/shaders/compute.comp -o build/bin/Debug/shaders/compute.comp.spv
 ```
 That command should terminate without any output (indicating success) and you now should see the file `compute.comp.spv`[^4] in your build output's `shaders` folder.
 
@@ -71,7 +71,7 @@ add_custom_command(
 ```
 The `OUTPUT` clause tells CMake what file this command produces. CMake uses this to compare timestamps: if `compute.comp.spv` is newer than `compute.comp`, the shader is not recompiled. The `DEPENDS` clause names the source file to compare against.
 
-The first `COMMAND` creates the output directory at build time if it doesn't exist yet, and the second runs the actual compilation. `${Vulkan_GLSLC_EXECUTABLE}` is a CMake variable that is populated by `find_package( Vulkan REQUIRED )` with the full path to the `glslc` compiler that ships with the Vulkan SDK.
+The first `COMMAND` creates the output directory at build time if it doesn't exist yet, and the second runs the actual compilation. `${Vulkan_GLSLC_EXECUTABLE}` is a CMake variable that is populated by `find_package( Vulkan REQUIRED COMPONENTS glslc )` with the full path to the `glslc` compiler that ships with the Vulkan SDK. Requesting the `glslc` component makes the configure step fail early with a clear message if the compiler is missing, instead of producing a confusing error later at build time.
 
 `add_custom_command` on its own only defines the command; it runs only when another target actually consumes its `OUTPUT`. As things stand nothing does, so CMake would never execute it. We therefore create a custom target that depends on the output file and make it a dependency of our main target.
 ```cmake
@@ -96,7 +96,7 @@ struct ShaderModuleCreateInfo
 {
     ...
     ShaderModuleCreateInfo& setFlags( vk::ShaderModuleCreateFlags );
-    ShaderModuleCreateInfo& setCode( const vk::container_t< const std::uint32_t >& );
+    ShaderModuleCreateInfo& setCode( const container_t< const std::uint32_t >& );
     ...
 };
 ```
@@ -137,7 +137,7 @@ void main()
     outputBuffer = inputBuffer * 4.2;   // does not compile
 }
 ```
-That won't work of course. If you try to compile the shader in that state, `glslc` will complain that neither `outputBuffer` nor `inputBuffer` are declared. Ultimately we want the buffers to be the GPU buffers we created in the last lesson. But since we don't know how to do that yet, let's create some dummy buffers directly in the shader [^6]:
+That won't work of course. If you try to compile the shader in that state, `glslc` will complain that neither `outputBuffer` nor `inputBuffer` are declared. Ultimately we want the buffers to be the GPU buffers we created in the last lesson. But since we don't know how to do that yet, let's create some dummy buffers directly in the shader[^6]:
 ```glsl
 const uint BUFFER_SIZE = 500;  // must match numElements in main.cpp
 
@@ -207,7 +207,7 @@ So far so good. Our shader is still not doing anything useful, because it isn't 
 [^3]: Installing the Vulkan SDK should have put its `bin` directory in your path so that the executable is found automatically. If that is not the case you should add that directory to your path by hand and try again.
 [^4]: The output file name `compute.comp.spv` may seem unnecessarily repetitive. This is true in our case, where we only have one compute shader. In larger projects however, you might have multiple vertex-, fragment- and compute-shaders. In that case, adding the shader type to the output filename helps avoid collisions and avoid confusion.
 [^5]: For the created program binaries, `CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG` and `CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE` take precedence over `CMAKE_RUNTIME_OUTPUT_DIRECTORY`. They ensure that our setup works with both single-config generators (e.g. Ninja) and multi-config generators (e.g. Visual Studio). If we wanted to use those variables for the compiled shaders as well, however, we'd have to add a conditional in the cmake code, so I opted for this approach.
-[^6] You'll probably notice an issue here: we have to declare the same logical variable (the buffer size) in two places: in the C++ and the shader code. This is error prone and should be fixed. The idiomatic way to do that in Vulkan would be to communicate the buffer size from C++ to the shader using either specialization constants or push constants. We won't do that here to not add even more complexity, but you should be aware of this problem and its solutions.
+[^6]: You'll probably notice an issue here: we have to declare the same logical variable (the buffer size) in two places: in the C++ and the shader code. This is error prone and should be fixed. The idiomatic way to do that in Vulkan would be to communicate the buffer size from C++ to the shader using either specialization constants or push constants. We won't do that here to not add even more complexity, but you should be aware of this problem and its solutions.
 [^7]: To my knowledge this is pure convenience for when you have to deal with two- and three-dimensional datasets (plus maybe a bit of heritage from graphics programming). I.e. there is no practical difference on the hardware between a one-dimensional workgroup with 256 parallel invocations, and a three-dimensional one with a size of 8x8x4.
 [^8]: In case you want to set a bigger workgroup size, be sure to check the value of vk::PhysicalDeviceProperties::limits.maxComputeWorkGroupInvocations (see lesson 3). That tells you the maximum number of parallel invocations in a local workgroup the device supports.
 
