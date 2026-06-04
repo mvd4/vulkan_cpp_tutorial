@@ -80,6 +80,55 @@ add_dependencies( ${TARGET_NAME} shaders )
 ```
 Now the shader will be compiled on the first build and recompiled only when `compute.comp` changes.
 
+## Loading the shader
+Okay, we have the precompiled shader now. The next step is to load it into the application and pass it on to Vulkan. The Vulkan C++ representation of a shader is `vk::ShaderModule` and it is created like this:
+```cpp
+class Device
+{
+    ...
+    UniqueShaderModule createShaderModuleUnique( const ShaderModuleCreateInfo& createInfo, ... );
+    ...
+};
+```
+No surprises so far, let's look at `ShaderModuleCreateInfo`:
+```cpp
+struct ShaderModuleCreateInfo
+{
+    ...
+    ShaderModuleCreateInfo& setFlags( vk::ShaderModuleCreateFlags );
+    ShaderModuleCreateInfo& setCode( const vk::container_t< const std::uint32_t >& );
+    ...
+};
+```
+As so often, the flags are just there for future use, which means that we really only have one parameter to set - the shader code in the form of a 32bit uint buffer. Which means that the whole process of creating the `ShaderModule` is very straightforward:
+```cpp
+auto createShaderModule(
+    const vk::Device& logicalDevice,
+    const std::filesystem::path& path
+) -> vk::UniqueShaderModule
+{
+    std::ifstream is{ path, std::ios::binary };
+    if ( !is.is_open() )
+        throw std::runtime_error( "Could not open file" );
+
+    auto buffer = std::vector< std::uint32_t >{};
+    const auto bufferSizeInBytes = std::filesystem::file_size( path );
+    if ( bufferSizeInBytes % sizeof( std::uint32_t ) != 0 )
+        throw std::runtime_error( "Shader file size is not a multiple of 4 bytes" );
+    buffer.resize( bufferSizeInBytes / sizeof( std::uint32_t ) );
+
+    is.seekg( 0 );
+    is.read( reinterpret_cast< char* >( buffer.data() ), bufferSizeInBytes );
+
+    const auto createInfo = vk::ShaderModuleCreateInfo{}.setCode( buffer );
+    return logicalDevice.createShaderModuleUnique( createInfo );
+}
+```
+The only thing we need to pay a bit of attention to is the mismatch between what the standard library expects when reading data (a pointer to a byte buffer) and what Vulkan expects (a `uint32_t` buffer). I've packaged the shader module creation into its own function from the start because it makes the code in main clearer and we're definitely going to need it more often in the future when we get to the graphics shaders. So with that we can load our compiled compute shader:
+```cpp
+const auto computeShader = createShaderModule( *logicalDevice, "./shaders/compute.comp.spv" );
+```
+
 ---
 
 [^1]: The GLSL Vulkan profile differs slightly from the one for OpenGL, mostly in that it removes deprecations. Some OpenGL shaders therefore might not compile directly for Vulkan without modifications. However, those modifications should usually be pretty minor.

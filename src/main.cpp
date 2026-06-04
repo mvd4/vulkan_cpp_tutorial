@@ -24,6 +24,8 @@ License.
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <numeric>
 #include <stdexcept>
@@ -335,6 +337,28 @@ auto createGPUBuffer(
     return { std::move( buffer ), std::move( memory ) };
 }
 
+auto createShaderModule(
+    const vk::Device& logicalDevice,
+    const std::filesystem::path& path
+) -> vk::UniqueShaderModule
+{
+    std::ifstream is{ path, std::ios::binary };
+    if ( !is.is_open() )
+        throw std::runtime_error( "Could not open file" );
+
+    auto buffer = std::vector< std::uint32_t >{};
+    const auto bufferSizeInBytes = std::filesystem::file_size( path );
+    if ( bufferSizeInBytes % sizeof( std::uint32_t ) != 0 )
+        throw std::runtime_error( "Shader file size is not a multiple of 4 bytes" );
+    buffer.resize( bufferSizeInBytes / sizeof( std::uint32_t ) );
+
+    is.seekg( 0 );
+    is.read( reinterpret_cast< char* >( buffer.data() ), bufferSizeInBytes );
+
+    const auto createInfo = vk::ShaderModuleCreateInfo{}.setCode( buffer );
+    return logicalDevice.createShaderModuleUnique( createInfo );
+}
+
 
 auto main() -> int
 {
@@ -356,6 +380,8 @@ auto main() -> int
         const auto mappedInputMemory = logicalDevice->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
         std::memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
         logicalDevice->unmapMemory( *inputBuffer.memory );
+
+        const auto computeShader = createShaderModule( *logicalDevice, "./shaders/compute.comp.spv" );
     }
     catch( const std::exception& e )
     {
