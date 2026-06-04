@@ -11,3 +11,20 @@ set_target_properties( ${TARGET_NAME} PROPERTIES
 )
 
 target_link_libraries( ${TARGET_NAME} PRIVATE Vulkan::Vulkan )
+
+
+# shaders
+set( SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/shaders" )
+set( SHADER_BINARY_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>/shaders" )
+
+add_custom_command(
+    OUTPUT  "${SHADER_BINARY_DIR}/compute.comp.spv"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_BINARY_DIR}"
+    COMMAND ${Vulkan_GLSLC_EXECUTABLE} "${SHADER_SOURCE_DIR}/compute.comp" -o "${SHADER_BINARY_DIR}/compute.comp.spv"
+    DEPENDS "${SHADER_SOURCE_DIR}/compute.comp"
+    COMMENT "Compiling compute shader"
+    VERBATIM
+)
+
+add_custom_target( shaders DEPENDS "${SHADER_BINARY_DIR}/compute.comp.spv" )
+add_dependencies( ${TARGET_NAME} shaders )

@@ -32,9 +32,58 @@ $ glslc src/shaders/compute.comp -o build/bin/Debug/shaders/compute.comp.spv
 ```
 That command should terminate without any output (indicating success) and you now should see the file `compute.comp.spv`[^4] in your build output's `shaders` folder.
 
+Nice, we now have the shader code in a format that can be used by Vulkan. However, I don't want to manually repeat the compilation whenever I change the shader code, so let's instead add it as a build step to our `CMakeLists.txt`.
+
+First, let's define two convenience variables for the shader source and output locations so we don't have to repeat the paths:
+```cmake
+set( SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/shaders" )
+set( SHADER_BINARY_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>/shaders" )
+```
+For this to work, we need to set `CMAKE_RUNTIME_OUTPUT_DIRECTORY` in our `CMakePresets.json`[^5]:
+```json
+{
+    ...
+    "configurePresets": [
+        {
+        "name": "base",
+        "hidden": true,
+        "binaryDir": "${sourceDir}/build/${presetName}",
+        "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "cacheVariables": {
+            "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/bin"
+        }
+        },
+        ...
+    ]
+}
+```
+
+With the convenience variables in place, we can now define a custom command for the shader compilation:
+```cmake
+add_custom_command(
+    OUTPUT  "${SHADER_BINARY_DIR}/compute.comp.spv"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_BINARY_DIR}"
+    COMMAND ${Vulkan_GLSLC_EXECUTABLE} "${SHADER_SOURCE_DIR}/compute.comp" -o "${SHADER_BINARY_DIR}/compute.comp.spv"
+    DEPENDS "${SHADER_SOURCE_DIR}/compute.comp"
+    COMMENT "Compiling compute shader"
+    VERBATIM
+)
+```
+The `OUTPUT` clause tells CMake what file this command produces. CMake uses this to compare timestamps: if `compute.comp.spv` is newer than `compute.comp`, the shader is not recompiled. The `DEPENDS` clause names the source file to compare against.
+
+The first `COMMAND` creates the output directory at build time if it doesn't exist yet, and the second runs the actual compilation. `${Vulkan_GLSLC_EXECUTABLE}` is a CMake variable that is populated by `find_package( Vulkan REQUIRED )` with the full path to the `glslc` compiler that ships with the Vulkan SDK.
+
+`add_custom_command` on its own only defines the command; it runs only when another target actually consumes its `OUTPUT`. As things stand nothing does, so CMake would never execute it. We therefore create a custom target that depends on the output file and make it a dependency of our main target.
+```cmake
+add_custom_target( shaders DEPENDS "${SHADER_BINARY_DIR}/compute.comp.spv" )
+add_dependencies( ${TARGET_NAME} shaders )
+```
+Now the shader will be compiled on the first build and recompiled only when `compute.comp` changes.
+
 ---
 
 [^1]: The GLSL Vulkan profile differs slightly from the one for OpenGL, mostly in that it removes deprecations. Some OpenGL shaders therefore might not compile directly for Vulkan without modifications. However, those modifications should usually be pretty minor.
 [^2]: There is no official standard that specifies the extension of .glsl shaders. However, the extensions `.vert`, `.frag` and `.comp` are very common for vertex, fragment and compute shaders respectively. They are also recognized by most tools that work with GLSL (e.g. VS code extensions).
 [^3]: Installing the Vulkan SDK should have put its `bin` directory in your path so that the executable is found automatically. If that is not the case you should add that directory to your path by hand and try again.
 [^4]: The output file name `compute.comp.spv` may seem unnecessarily repetitive. This is true in our case, where we only have one compute shader. In larger projects however, you might have multiple vertex-, fragment- and compute-shaders. In that case, adding the shader type to the output filename helps avoid collisions and avoid confusion.
+[^5]: For the created program binaries, `CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG` and `CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE` take precedence over `CMAKE_RUNTIME_OUTPUT_DIRECTORY`. They ensure that our setup works with both single-config generators (e.g. Ninja) and multi-config generators (e.g. Visual Studio). If we wanted to use those variables for the compiled shaders as well, however, we'd have to add a conditional in the cmake code, so I opted for this approach.
