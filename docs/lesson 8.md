@@ -63,3 +63,104 @@ const auto shaderStageInfo = vk::PipelineShaderStageCreateInfo{}
     .setModule( *computeShader );
 ```
 That wasn't too hard, was it? With that our pipeline would know already which shader to use.
+
+## Pipeline Layout
+Let's now look at the second structure that we need to create our pipeline, the `PipelineLayout`. That one represents the configuration of the pipeline in terms of how the data that is processed in the pipeline is structured. It is created using the familiar pattern:
+```cpp
+class Device
+{
+    ...
+    UniquePipelineLayout createPipelineLayoutUnique( const vk::PipelineLayoutCreateInfo& , ... );
+    ...
+};
+```
+... with:
+```cpp
+struct PipelineLayoutCreateInfo
+{
+    ...
+    PipelineLayoutCreateInfo & setFlags( vk::PipelineLayoutCreateFlags flags_ );
+    PipelineLayoutCreateInfo & setSetLayouts( const container_t< const vk::DescriptorSetLayout >& setLayouts_ );
+    PipelineLayoutCreateInfo & setPushConstantRanges( const container_t< const vk::PushConstantRange>& pushConstantRanges_ );
+    ...
+};
+```
+The flags are once again reserved for future use. Push constants are a mechanism to send small amounts of data to the shaders in a fast way. We may cover them later, but for now we just want to get the pipeline working so we'll ignore the `pushConstantRanges_` as well. Which means that we only need to set the `DescriptorSetLayout`s. So what are those?
+
+To explain that we need to first talk about descriptors. The Vulkan pipeline and its shaders do not access data resources (like e.g. images and buffers) directly. Instead descriptors are used as proxy objects. This indirection allows for the pipeline to be created once and then remain unchanged while still being able to work with changing resources. Those descriptors are always grouped in `DescriptorSet`s, you cannot create a descriptor that is not part of such a set.
+
+We'll get to actually creating `DescriptorSet`s in the next lesson. To create our `PipelineLayout` however, we don't need the actual set but only its layout. As said, the `PipelineLayout` represents the structure of the data the pipeline is going to work with, so we need to give it the structure of the descriptor sets we're intending to use. This is what the `DescriptorSetLayout` is for. A `PipelineLayout` can contain multiple `DescriptorSetLayout`s, as depicted in the following example:
+
+![Example Pipeline Layout](images/Pipeline_Layout_1.png "Fig. 1: Example Pipeline Layout")
+
+There is, however, a limitation to the number of descriptor sets that can be bound to one pipeline. This limit is device dependent and can be as low as 4[^1].
+
+So let's see how we can create our layout:
+```cpp
+class Device
+{
+    ...
+    UniqueDescriptorSetLayout createDescriptorSetLayoutUnique( const vk::DescriptorSetLayoutCreateInfo&, ... );
+    ...
+};
+```
+Again the familiar pattern. The create info is very simple, it looks like this:
+```cpp
+struct DescriptorSetLayoutCreateInfo
+{
+    ...
+    DescriptorSetLayoutCreateInfo& setFlags( vk::DescriptorSetLayoutCreateFlags flags_ );
+    DescriptorSetLayoutCreateInfo& setBindings( const container_t< const vk::DescriptorSetLayoutBinding >& bindings_ );
+    ...
+};
+```
+There are a few flags defined but we don't need any for our use case, so let's concentrate on the second function. That takes a collection of `DescriptorSetLayoutBinding`s. Those bindings define which concrete types of resources make up the `DescriptorSetLayout` and in which order. Let me try to illustrate this by refining the example from before:
+
+![Example Pipeline Layout Refined](images/Pipeline_Layout_2.png "Fig. 2: Example Pipeline Layout Refined")
+
+`DescriptorSetLayoutBinding` offers the following interface:
+```cpp
+struct DescriptorSetLayoutBinding
+{
+    ...
+    DescriptorSetLayoutBinding& setBinding( uint32_t binding_ );
+    DescriptorSetLayoutBinding& setDescriptorType( vk::DescriptorType descriptorType_ );
+    DescriptorSetLayoutBinding& setDescriptorCount( uint32_t descriptorCount_ );
+    DescriptorSetLayoutBinding& setStageFlags( vk::ShaderStageFlags stageFlags_ );
+    DescriptorSetLayoutBinding& setImmutableSamplers( const container_t<const vk::Sampler>& immutableSamplers_ );
+    ...
+};
+```
+- the first parameter, the `binding_`, defines the so-called bind point of this descriptor. You can think of the bind point as the index of the slot in the descriptor set that this resource occupies (see also the image above).
+- `descriptorType` is straightforward as it simply identifies the resource type this descriptor is representing. There are quite a few possible resource types available, in our case `eStorageBuffer` is the right one to use because both our input and output data are just that: storage buffers.
+- you can actually bind multiple descriptors of the same type to one bind point, which is what the `descriptorCount_` parameter is for.
+- the `stageFlags_` define which shader stages are allowed to access the descriptor(s). Since we only have the compute stage, we'll just pass the `eCompute` flag.
+- finally, we can ignore the `immutableSamplers_` parameter for now because we do not have a sampler resource.
+
+So, with that information we can create the bindings for our input and output buffer and feed them into the create info from which we create the `DescriptorSetLayout`.
+```cpp
+auto createDescriptorSetLayout( const vk::Device& logicalDevice ) -> vk::UniqueDescriptorSetLayout
+{
+    const auto bindings = std::array< vk::DescriptorSetLayoutBinding, 2 >{
+        vk::DescriptorSetLayoutBinding{}
+            .setBinding( 0 )
+            .setStageFlags( vk::ShaderStageFlagBits::eCompute )
+            .setDescriptorType( vk::DescriptorType::eStorageBuffer )
+            .setDescriptorCount( 1 ),
+        vk::DescriptorSetLayoutBinding{}
+            .setBinding( 1 )
+            .setStageFlags( vk::ShaderStageFlagBits::eCompute )
+            .setDescriptorType( vk::DescriptorType::eStorageBuffer )
+            .setDescriptorCount( 1 ),
+    };
+    const auto descriptorSetLayoutCreateInfo = vk::DescriptorSetLayoutCreateInfo{}
+        .setBindings( bindings );
+
+    return logicalDevice.createDescriptorSetLayoutUnique( descriptorSetLayoutCreateInfo );
+}
+```
+So we bind one descriptor representing a storage buffer to binding point 0 and another one to binding point 1.
+
+---
+
+[^1]: See https://vulkan.gpuinfo.org/displaydevicelimit.php?name=maxBoundDescriptorSets&platform=windows

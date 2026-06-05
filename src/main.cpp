@@ -337,6 +337,26 @@ auto createGPUBuffer(
     return { std::move( buffer ), std::move( memory ) };
 }
 
+auto createDescriptorSetLayout( const vk::Device& logicalDevice ) -> vk::UniqueDescriptorSetLayout
+{
+    const auto bindings = std::array< vk::DescriptorSetLayoutBinding, 2 >{
+        vk::DescriptorSetLayoutBinding{}
+            .setBinding( 0 )
+            .setStageFlags( vk::ShaderStageFlagBits::eCompute )
+            .setDescriptorType( vk::DescriptorType::eStorageBuffer )
+            .setDescriptorCount( 1 ),
+        vk::DescriptorSetLayoutBinding{}
+            .setBinding( 1 )
+            .setStageFlags( vk::ShaderStageFlagBits::eCompute )
+            .setDescriptorType( vk::DescriptorType::eStorageBuffer )
+            .setDescriptorCount( 1 ),
+    };
+    const auto descriptorSetLayoutCreateInfo = vk::DescriptorSetLayoutCreateInfo{}
+        .setBindings( bindings );
+
+    return logicalDevice.createDescriptorSetLayoutUnique( descriptorSetLayoutCreateInfo );
+}
+
 auto createShaderModule(
     const vk::Device& logicalDevice,
     const std::filesystem::path& path
