@@ -103,8 +103,81 @@ int main()
     ...
 }
 ```
-Nice, we have the concrete descriptor set now.
+Nice, we have the concrete descriptor set now. Unfortunately there still seems to be no connection to our actual buffers. Why is this again so complicated?
+
+The reason here is that the layout of the descriptor set is not going to change. After all, our whole pipeline and shaders are tailored to that layout. The actual data in the buffers, the images etc on the other hand are pretty likely to change in a real world application. Since we don't want to continuously allocate and release descriptor sets, there is this additional level of indirection that separates the descriptor set from the data. The flipside is that we have to do an extra step to connect our descriptor set with the resources it represents. This is called updating the descriptor set:
+```cpp
+class Device
+{
+    ...
+    void updateDescriptorSets(
+        const container_t< vk::WriteDescriptorSet >& writeDescriptorSet,
+        const container_t< vk::CopyDescriptorSet >& copyDescriptorSet,
+        ...
+    );
+    ...
+};
+```
+Since we don't want to copy any descriptor sets, we can focus on the `writeDescriptorSet` parameter.
+```cpp
+struct WriteDescriptorSet
+{
+    ...
+    WriteDescriptorSet& setDstSet( vk::DescriptorSet dstSet_ );
+    WriteDescriptorSet& setDstBinding( uint32_t dstBinding_ );
+    WriteDescriptorSet& setDescriptorType( vk::DescriptorType descriptorType_ );
+    WriteDescriptorSet& setDstArrayElement( uint32_t dstArrayElement_ );
+    WriteDescriptorSet& setDescriptorCount( uint32_t descriptorCount_ );
+    WriteDescriptorSet& setImageInfo( const container_t< const vk::DescriptorImageInfo >& imageInfo_ );
+    WriteDescriptorSet& setBufferInfo( const container_t< const vk::DescriptorBufferInfo >& bufferInfo_ );
+    WriteDescriptorSet& setTexelBufferView( const container_t< const vk::BufferView >& texelBufferView_ );
+    ...
+};
+```
+That struct looks a bit more involved. Let's unpack the fields:
+- `dstSet` is straightforward, it's the descriptor set we want to update.
+- `dstBinding` as well, that's the first bind point we want to update. The number of bind points to update is derived from the number of elements passed to the `set...Info` functions.
+- the `descriptorType_` should also be clear
+- `dstArrayElement` and `descriptorCount_` are a bit less straightforward. You might remember from the last lesson that it is possible to bind multiple resources of the same type to one bind point in the descriptor set layout. In our simple case we did not make use of that feature, but imagine you are binding a dozen or more texture images to one bind point. If only one texture in the middle of that set changes, it would be very inefficient to update all descriptors at that bind point. Therefore Vulkan allows you to set the index and the count of descriptors you want to update. In our case we can ignore both fields since we only have one resource at each bind point.
+- we can ignore `imageInfo_` and `texelBufferView_` as well for now because we don't deal with images yet.
+- which leaves the `DescriptorBufferInfo`, so let's look at that:
+```cpp
+struct DescriptorBufferInfo
+{
+    ...
+    DescriptorBufferInfo& setBuffer( vk::Buffer buffer_ );
+    DescriptorBufferInfo& setOffset( vk::DeviceSize offset_ );
+    DescriptorBufferInfo& setRange( vk::DeviceSize range_ );
+    ...
+};
+```
+Now that looks straightforward enough. We can specify the buffer we want to bind to the respective descriptor and optionally an offset and range in that buffer.
+
+Which means that we now can actually connect our buffers with the descriptors. Note that we set `dstBinding` to 0 and pass two buffer infos. Vulkan will update consecutive bindings starting from `dstBinding`, so the first `DescriptorBufferInfo` is written to binding 0 and the second to binding 1:
+```cpp
+const auto bufferInfos = std::vector< vk::DescriptorBufferInfo >{
+    vk::DescriptorBufferInfo{}
+        .setBuffer( *inputBuffer.buffer )
+        .setOffset( 0 )
+        .setRange( sizeof( inputData ) ),
+    vk::DescriptorBufferInfo{}
+        .setBuffer( *outputBuffer.buffer )
+        .setOffset( 0 )
+        .setRange( sizeof( outputData ) ),
+};
+const auto writeDescriptorSet = vk::WriteDescriptorSet{}
+    .setDstSet( descriptorSets[0] )
+    .setDstBinding( 0 )
+    .setDescriptorType( vk::DescriptorType::eStorageBuffer )
+    .setBufferInfo( bufferInfos );
+logicalDevice->updateDescriptorSets( writeDescriptorSet, {} );
+```
+And that's it. We've created and updated our descriptor sets. One remaining problem is that our pipeline still doesn't know about that descriptor set. We also did not yet address the question of how to actually execute our pipeline on the device. We'll cover both of that in the next lesson when we'll finally get our pipeline running.
+
 
 ---
 
 [^1]: You can explicitly release individual descriptor sets instead of letting them be cleaned up automatically when the pool is destroyed. In that case you need to set the `DescriptorPoolCreateFlagBits::eFreeDescriptorSet` flag when creating the pool.
+
+Further reading:
+[API without Secrets: Introduction to Vulkan – Part 6](https://www.intel.com/content/www/us/en/developer/articles/training/api-without-secrets-introduction-to-vulkan-part-6.html#inpage-nav-3-1)

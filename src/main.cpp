@@ -444,6 +444,26 @@ auto main() -> int
             .setSetLayouts( *descriptorSetLayout )
             .setDescriptorPool( *descriptorPool );
         const auto descriptorSets = logicalDevice->allocateDescriptorSets( allocateInfo );
+
+        const auto bufferInfos = std::vector< vk::DescriptorBufferInfo >{
+            vk::DescriptorBufferInfo{}
+                .setBuffer( *inputBuffer.buffer )
+                .setOffset( 0 )
+                .setRange( sizeof( inputData ) ),
+            vk::DescriptorBufferInfo{}
+                .setBuffer( *outputBuffer.buffer )
+                .setOffset( 0 )
+                .setRange( sizeof( outputData ) ),
+        };
+        // dstBinding is the *first* binding to update; Vulkan updates consecutive
+        // bindings for each element in bufferInfos (so binding 0 and 1 here).
+        const auto writeDescriptorSet = vk::WriteDescriptorSet{}
+            .setDstSet( descriptorSets[0] )
+            .setDstBinding( 0 )
+            .setDescriptorType( vk::DescriptorType::eStorageBuffer )
+            .setBufferInfo( bufferInfos );
+
+        logicalDevice->updateDescriptorSets( writeDescriptorSet, {} );
     }
     catch( const std::exception& e )
     {
