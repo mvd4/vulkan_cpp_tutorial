@@ -337,26 +337,6 @@ auto createGPUBuffer(
     return { std::move( buffer ), std::move( memory ) };
 }
 
-auto createDescriptorSetLayout( const vk::Device& logicalDevice ) -> vk::UniqueDescriptorSetLayout
-{
-    const auto bindings = std::array< vk::DescriptorSetLayoutBinding, 2 >{
-        vk::DescriptorSetLayoutBinding{}
-            .setBinding( 0 )
-            .setStageFlags( vk::ShaderStageFlagBits::eCompute )
-            .setDescriptorType( vk::DescriptorType::eStorageBuffer )
-            .setDescriptorCount( 1 ),
-        vk::DescriptorSetLayoutBinding{}
-            .setBinding( 1 )
-            .setStageFlags( vk::ShaderStageFlagBits::eCompute )
-            .setDescriptorType( vk::DescriptorType::eStorageBuffer )
-            .setDescriptorCount( 1 ),
-    };
-    const auto descriptorSetLayoutCreateInfo = vk::DescriptorSetLayoutCreateInfo{}
-        .setBindings( bindings );
-
-    return logicalDevice.createDescriptorSetLayoutUnique( descriptorSetLayoutCreateInfo );
-}
-
 auto createShaderModule(
     const vk::Device& logicalDevice,
     const std::filesystem::path& path
@@ -377,6 +357,48 @@ auto createShaderModule(
 
     const auto createInfo = vk::ShaderModuleCreateInfo{}.setCode( buffer );
     return logicalDevice.createShaderModuleUnique( createInfo );
+}
+
+auto createDescriptorSetLayout( const vk::Device& logicalDevice ) -> vk::UniqueDescriptorSetLayout
+{
+    const auto bindings = std::array< vk::DescriptorSetLayoutBinding, 2 >{
+        vk::DescriptorSetLayoutBinding{}
+            .setBinding( 0 )
+            .setStageFlags( vk::ShaderStageFlagBits::eCompute )
+            .setDescriptorType( vk::DescriptorType::eStorageBuffer )
+            .setDescriptorCount( 1 ),
+        vk::DescriptorSetLayoutBinding{}
+            .setBinding( 1 )
+            .setStageFlags( vk::ShaderStageFlagBits::eCompute )
+            .setDescriptorType( vk::DescriptorType::eStorageBuffer )
+            .setDescriptorCount( 1 ),
+    };
+    const auto descriptorSetLayoutCreateInfo = vk::DescriptorSetLayoutCreateInfo{}
+        .setBindings( bindings );
+
+    return logicalDevice.createDescriptorSetLayoutUnique( descriptorSetLayoutCreateInfo );
+}
+
+auto createComputePipeline(
+    const vk::Device& logicalDevice,
+    const vk::DescriptorSetLayout& descriptorSetLayout,
+    const vk::ShaderModule& computeShader
+) -> vk::UniquePipeline
+{
+    const auto shaderStageInfo = vk::PipelineShaderStageCreateInfo{}
+        .setStage( vk::ShaderStageFlagBits::eCompute )
+        .setPName( "main" )
+        .setModule( computeShader );
+
+    const auto pipelineLayoutCreateInfo = vk::PipelineLayoutCreateInfo{}
+        .setSetLayouts( descriptorSetLayout );
+    const auto pipelineLayout = logicalDevice.createPipelineLayoutUnique( pipelineLayoutCreateInfo );
+
+    const auto pipelineCreateInfo = vk::ComputePipelineCreateInfo{}
+        .setStage( shaderStageInfo )
+        .setLayout( *pipelineLayout );
+
+    return logicalDevice.createComputePipelineUnique( vk::PipelineCache{}, pipelineCreateInfo ).value;
 }
 
 
@@ -403,10 +425,8 @@ auto main() -> int
 
         const auto computeShader = createShaderModule( *logicalDevice, "./shaders/compute.comp.spv" );
 
-        const auto shaderStageInfo = vk::PipelineShaderStageCreateInfo{}
-            .setStage( vk::ShaderStageFlagBits::eCompute )
-            .setPName( "main" )
-            .setModule( *computeShader );
+        const auto descriptorSetLayout = createDescriptorSetLayout( *logicalDevice );
+        const auto pipeline = createComputePipeline( *logicalDevice, *descriptorSetLayout, *computeShader );
     }
     catch( const std::exception& e )
     {
