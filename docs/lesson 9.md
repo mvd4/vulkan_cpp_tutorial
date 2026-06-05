@@ -89,7 +89,7 @@ auto createDescriptorPool( const vk::Device& logicalDevice ) -> vk::UniqueDescri
     return logicalDevice.createDescriptorPoolUnique( poolCreateInfo );
 }
 
-int main()
+auto main() -> int
 {
     try
     {
@@ -166,12 +166,14 @@ const auto bufferInfos = std::vector< vk::DescriptorBufferInfo >{
         .setRange( sizeof( outputData ) ),
 };
 const auto writeDescriptorSet = vk::WriteDescriptorSet{}
-    .setDstSet( descriptorSets[0] )
+    .setDstSet( descriptorSets[ 0 ] )
     .setDstBinding( 0 )
     .setDescriptorType( vk::DescriptorType::eStorageBuffer )
     .setBufferInfo( bufferInfos );
 logicalDevice->updateDescriptorSets( writeDescriptorSet, {} );
 ```
+Note that this single write works only because bindings 0 and 1 share the same descriptor type (`eStorageBuffer`): Vulkan overflows the descriptors into consecutive bindings of the *same* type. If our two buffers had different descriptor types, we would have to use a separate `WriteDescriptorSet` for each binding.
+
 And that's it. We've created and updated our descriptor sets. One remaining problem is that our pipeline still doesn't know about that descriptor set. We also did not yet address the question of how to actually execute our pipeline on the device. We'll cover both of that in the next lesson when we'll finally get our pipeline running.
 
 

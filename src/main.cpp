@@ -458,7 +458,7 @@ auto main() -> int
         // dstBinding is the *first* binding to update; Vulkan updates consecutive
         // bindings for each element in bufferInfos (so binding 0 and 1 here).
         const auto writeDescriptorSet = vk::WriteDescriptorSet{}
-            .setDstSet( descriptorSets[0] )
+            .setDstSet( descriptorSets[ 0 ] )
             .setDstBinding( 0 )
             .setDescriptorType( vk::DescriptorType::eStorageBuffer )
             .setBufferInfo( bufferInfos );
