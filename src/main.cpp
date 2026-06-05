@@ -401,6 +401,17 @@ auto createComputePipeline(
     return logicalDevice.createComputePipelineUnique( vk::PipelineCache{}, pipelineCreateInfo ).value;
 }
 
+auto createDescriptorPool( const vk::Device& logicalDevice ) -> vk::UniqueDescriptorPool
+{
+    const auto poolSize = vk::DescriptorPoolSize{}
+        .setType( vk::DescriptorType::eStorageBuffer )
+        .setDescriptorCount( 2 );
+    const auto poolCreateInfo = vk::DescriptorPoolCreateInfo{}
+        .setMaxSets( 1 )
+        .setPoolSizes( poolSize );
+    return logicalDevice.createDescriptorPoolUnique( poolCreateInfo );
+}
+
 
 auto main() -> int
 {
@@ -427,6 +438,12 @@ auto main() -> int
 
         const auto descriptorSetLayout = createDescriptorSetLayout( *logicalDevice );
         const auto pipeline = createComputePipeline( *logicalDevice, *descriptorSetLayout, *computeShader );
+
+        const auto descriptorPool = createDescriptorPool( *logicalDevice );
+        const auto allocateInfo = vk::DescriptorSetAllocateInfo{}
+            .setSetLayouts( *descriptorSetLayout )
+            .setDescriptorPool( *descriptorPool );
+        const auto descriptorSets = logicalDevice->allocateDescriptorSets( allocateInfo );
     }
     catch( const std::exception& e )
     {
