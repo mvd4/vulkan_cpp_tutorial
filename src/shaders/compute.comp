@@ -4,8 +4,17 @@ layout( local_size_x = 64 ) in;
 
 const uint BUFFER_SIZE = 500;  // must match numElements in main.cpp
 
-int inputBuffer[BUFFER_SIZE];
-float outputBuffer[BUFFER_SIZE];
+
+layout( set = 0, binding = 0 ) readonly buffer inputBufferLayout
+{
+    int inputBuffer[];
+};
+
+layout( set = 0, binding = 1 ) writeonly buffer outputBufferLayout
+{
+    float outputBuffer[];
+};
+
 
 void main()
 {
@@ -13,5 +22,5 @@ void main()
     if ( processingIndex >= BUFFER_SIZE )
         return;
 
-    outputBuffer[ processingIndex ] = inputBuffer[ processingIndex ] * 4.2;
+    outputBuffer[ processingIndex ] = inputBuffer[ processingIndex ] * 4.2f;
 }

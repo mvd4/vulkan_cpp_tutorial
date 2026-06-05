@@ -161,6 +161,38 @@ auto createDescriptorSetLayout( const vk::Device& logicalDevice ) -> vk::UniqueD
 ```
 So we bind one descriptor representing a storage buffer to binding point 0 and another one to binding point 1.
 
+## Completing the Shader Code
+Let's come back to our compute shader now. Because we have defined the data layout and told our pipeline the bind points for our data buffers, we can now actually complete the shader code and get rid of the dummy buffers. As said, the shaders access data via the descriptors, so all we need to do now is to tell our shader the bind points of the descriptors that represent the input and output buffer. In GLSL this is done by defining so-called Shader Storage Buffer Objects:
+```glsl
+layout( set = 0, binding = 0 ) readonly buffer inputBufferLayout
+{
+    int inputBuffer[];
+};
+
+layout( set = 0, binding = 1 ) writeonly buffer outputBufferLayout
+{
+    float outputBuffer[];
+};
+```
+As you can see there is a direct correspondence between the descriptor set layout that we specified above and the `layout` directives in the shaders. It is essential that the declaration of the bind points for the resources match, otherwise our pipeline won't work correctly.
+
+The `set` qualifier refers to the index of the descriptor set within the pipeline layout. Recall that a `PipelineLayout` can hold multiple `DescriptorSetLayout`s — the `set` index selects which one this resource belongs to. We only have one descriptor set, so `set = 0` is the right choice.
+
+The `readonly` and `writeonly` qualifiers should be self-explanatory. You can omit them, in which case the resource will be readwrite. Since you can use the same layout declaration syntax for different types of resources, you have to specify the type explicitly. In our case it is `buffer`. The last identifier is the name of the layout.
+
+You might wonder why it is necessary to declare the actual buffers again in between the parentheses. The answer is that you can structure the buffer into multiple different data blocks as displayed in the following example:
+```glsl
+layout( binding = 2 ) buffer MyExampleBuffer
+{
+  mat4 matrix;
+  vec4 vector;
+  float lotsOfFloats[];
+};
+```
+The only requirement is that the size of all fields is known and fixed except for the last one. We don't need this feature, nevertheless we have to adhere to the syntax and give our buffers a name. Anyway, our shader is now complete and should be fully functional once we're able to invoke it properly from our pipeline.
+
+
+
 ---
 
 [^1]: See https://vulkan.gpuinfo.org/displaydevicelimit.php?name=maxBoundDescriptorSets&platform=windows
