@@ -191,8 +191,53 @@ layout( binding = 2 ) buffer MyExampleBuffer
 ```
 The only requirement is that the size of all fields is known and fixed except for the last one. We don't need this feature, nevertheless we have to adhere to the syntax and give our buffers a name. Anyway, our shader is now complete and should be fully functional once we're able to invoke it properly from our pipeline.
 
+## Creating the Pipeline
+Speaking of the pipeline: with the descriptor set layout defined, we now have all the pieces needed to create it:
+```cpp
+auto createComputePipeline(
+    const vk::Device& logicalDevice,
+    const vk::DescriptorSetLayout& descriptorSetLayout,
+    const vk::ShaderModule& computeShader
+) -> vk::UniquePipeline
+{
+    const auto shaderStageInfo = vk::PipelineShaderStageCreateInfo{}
+        .setStage( vk::ShaderStageFlagBits::eCompute )
+        .setPName( "main" )
+        .setModule( computeShader );
 
+    const auto pipelineLayoutCreateInfo = vk::PipelineLayoutCreateInfo{}
+        .setSetLayouts( descriptorSetLayout );
+    const auto pipelineLayout = logicalDevice.createPipelineLayoutUnique( pipelineLayoutCreateInfo );
+
+    const auto pipelineCreateInfo = vk::ComputePipelineCreateInfo{}
+        .setStage( shaderStageInfo )
+        .setLayout( *pipelineLayout );
+
+    return logicalDevice.createComputePipelineUnique( vk::PipelineCache{}, pipelineCreateInfo ).value;
+}
+
+int main()
+{
+    try
+    {
+        ...
+        const auto descriptorSetLayout = createDescriptorSetLayout( *logicalDevice );
+        const auto pipeline = createComputePipeline( *logicalDevice, *descriptorSetLayout, *computeShader );
+    }
+    ...
+}
+```
+Whoa, we've created our compute pipeline. It has the compute shader and also knows the descriptor layout for our input and output buffers so that it can pass those on to the shader.
+
+You may have noticed that `pipelineLayout` is a local variable that gets destroyed at the end of `createComputePipeline`. That is intentional and safe: Vulkan bakes the pipeline layout into the pipeline object at creation time, so the layout handle is no longer needed once `createComputePipelineUnique` returns. You are free to destroy it immediately afterwards.
+
+There are still a few things missing though. For one, the pipeline knows the layout of the descriptor sets but we didn't actually create any descriptor set yet. Second, it still needs to be told what to do with all that[^2]. That's what we're going to cover in the next chapter.
 
 ---
 
 [^1]: See https://vulkan.gpuinfo.org/displaydevicelimit.php?name=maxBoundDescriptorSets&platform=windows
+[^2]: This might seem overly explicit - the pipeline should execute the shaders on the input data of course. Well, that might be obvious in this simple case. But Vulkan is designed to handle much more complex scenarios, so we need to tell it exactly what we want.
+
+Further reading:
+- [vkguide.dev — Descriptors](https://vkguide.dev/docs/chapter-4/descriptors/)
+- [OpenGL Wiki — Shader Storage Buffer Object](https://www.khronos.org/opengl/wiki/Shader_Storage_Buffer_Object)
