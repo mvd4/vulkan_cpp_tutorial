@@ -382,6 +382,11 @@ auto main() -> int
         logicalDevice->unmapMemory( *inputBuffer.memory );
 
         const auto computeShader = createShaderModule( *logicalDevice, "./shaders/compute.comp.spv" );
+
+        const auto shaderStageInfo = vk::PipelineShaderStageCreateInfo{}
+            .setStage( vk::ShaderStageFlagBits::eCompute )
+            .setPName( "main" )
+            .setModule( *computeShader );
     }
     catch( const std::exception& e )
     {
