@@ -62,6 +62,13 @@ struct GPUBuffer
     vk::UniqueDeviceMemory memory;
 };
 
+struct LogicalDevice
+{
+    vk::UniqueDevice device;
+    std::uint32_t queueFamilyIndex;
+
+    operator const vk::Device&() const { return *device; }
+};
 
 constexpr auto getVulkanSDKVersion() -> VersionNumber
 {
@@ -245,7 +252,7 @@ auto getRequiredDeviceExtensions(
     return result;
 }
 
-auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> vk::UniqueDevice
+auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> LogicalDevice
 {
     const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
     std::cout << "\nAvailable queue families:\n";
@@ -277,7 +284,10 @@ auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> vk::Uniq
         .setQueueCreateInfos( queueCreateInfos )
         .setPEnabledExtensionNames( enabledDeviceExtensions );
 
-    return physicalDevice.createDeviceUnique( deviceCreateInfo );
+    return LogicalDevice{
+        std::move( physicalDevice.createDeviceUnique( deviceCreateInfo ) ),
+        queueFamilyIndex
+    };
 }
 
 auto findSuitableMemoryIndex(
@@ -427,23 +437,23 @@ auto main() -> int
 
         auto outputData = std::array< float, numElements >{};
 
-        const auto inputBuffer = createGPUBuffer( physicalDevice, *logicalDevice, sizeof( inputData ) );
-        const auto outputBuffer = createGPUBuffer( physicalDevice, *logicalDevice, sizeof( outputData ) );
+        const auto inputBuffer = createGPUBuffer( physicalDevice, logicalDevice, sizeof( inputData ) );
+        const auto outputBuffer = createGPUBuffer( physicalDevice, logicalDevice, sizeof( outputData ) );
 
-        const auto mappedInputMemory = logicalDevice->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
+        const auto mappedInputMemory = logicalDevice.device->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
         std::memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
-        logicalDevice->unmapMemory( *inputBuffer.memory );
+        logicalDevice.device->unmapMemory( *inputBuffer.memory );
 
-        const auto computeShader = createShaderModule( *logicalDevice, "./shaders/compute.comp.spv" );
+        const auto computeShader = createShaderModule( logicalDevice, "./shaders/compute.comp.spv" );
 
-        const auto descriptorSetLayout = createDescriptorSetLayout( *logicalDevice );
-        const auto pipeline = createComputePipeline( *logicalDevice, *descriptorSetLayout, *computeShader );
+        const auto descriptorSetLayout = createDescriptorSetLayout( logicalDevice );
+        const auto pipeline = createComputePipeline( logicalDevice, *descriptorSetLayout, *computeShader );
 
-        const auto descriptorPool = createDescriptorPool( *logicalDevice );
+        const auto descriptorPool = createDescriptorPool( logicalDevice );
         const auto allocateInfo = vk::DescriptorSetAllocateInfo{}
             .setSetLayouts( *descriptorSetLayout )
             .setDescriptorPool( *descriptorPool );
-        const auto descriptorSets = logicalDevice->allocateDescriptorSets( allocateInfo );
+        const auto descriptorSets = logicalDevice.device->allocateDescriptorSets( allocateInfo );
 
         const auto bufferInfos = std::vector< vk::DescriptorBufferInfo >{
             vk::DescriptorBufferInfo{}
@@ -463,7 +473,17 @@ auto main() -> int
             .setDescriptorType( vk::DescriptorType::eStorageBuffer )
             .setBufferInfo( bufferInfos );
 
-        logicalDevice->updateDescriptorSets( writeDescriptorSet, {} );
+        logicalDevice.device->updateDescriptorSets( writeDescriptorSet, {} );
+
+        const auto commandPool = logicalDevice.device->createCommandPoolUnique(
+            vk::CommandPoolCreateInfo{}.setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
+        );
+
+        const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
+            .setCommandPool( *commandPool )
+            .setLevel( vk::CommandBufferLevel::ePrimary )
+            .setCommandBufferCount( 1 );
+        const auto commandBuffer = logicalDevice.device->allocateCommandBuffers( commandBufferAllocateInfo )[0];
     }
     catch( const std::exception& e )
     {
