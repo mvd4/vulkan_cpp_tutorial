@@ -13,7 +13,7 @@ You might expect the pipeline-related tasks to be implemented as high level API 
 - the command buffers can be reused (e.g. the tasks that are executed in a rendering pipeline will often not change in between frames, only some of the data will. So instead of re-issuing the same API calls over and over, you can just execute the same command buffers)
 - the overhead of CPU-GPU communication is reduced
 
-For us this means that we need to do to the following to get our pipeline up and running:
+For us this means that we need to do the following to get our pipeline up and running:
 - create a command buffer
 - add the necessary commands to it (Vulkan-speak for that is 'recording the commands'):
   - use our compute pipeline
@@ -74,6 +74,7 @@ struct LogicalDevice {
     std::uint32_t queueFamilyIndex;
 
     operator const vk::Device&() const { return *device; }
+    const vk::Device* operator->() const { return &*device; }
 };
 
 auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> LogicalDevice
@@ -108,7 +109,7 @@ Alright, we have the command buffer now so let's prepare it for recording our co
 class CommandBuffer
 {
     ...
-    void begin( const CommandBufferBeginInfo& beginInfo, ... ) const noexcept;
+    void begin( const CommandBufferBeginInfo& beginInfo, ... ) const;
     ...
 };
 ```
@@ -150,7 +151,7 @@ commandBuffer.begin( beginInfo );
 commandBuffer.end();
 ```
 
-The command buffer is ready to take in commands now. We'll do that in the next lesson, so for now there will still not be any output when you run the program. But we're getting close, so stay tuned.
+The command buffer is ready to take in commands now. We'll do that in the next lesson, so for now there will still not be any output when you run the program. The program should however run cleanly without any validation errors, which is a good sign that our setup so far is correct. But we're getting close, so stay tuned.
 
 ---
 

@@ -68,6 +68,7 @@ struct LogicalDevice
     std::uint32_t queueFamilyIndex;
 
     operator const vk::Device&() const { return *device; }
+    const vk::Device* operator->() const { return &*device; }
 };
 
 constexpr auto getVulkanSDKVersion() -> VersionNumber
@@ -285,7 +286,7 @@ auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> LogicalD
         .setPEnabledExtensionNames( enabledDeviceExtensions );
 
     return LogicalDevice{
-        std::move( physicalDevice.createDeviceUnique( deviceCreateInfo ) ),
+        physicalDevice.createDeviceUnique( deviceCreateInfo ),
         queueFamilyIndex
     };
 }
@@ -440,9 +441,9 @@ auto main() -> int
         const auto inputBuffer = createGPUBuffer( physicalDevice, logicalDevice, sizeof( inputData ) );
         const auto outputBuffer = createGPUBuffer( physicalDevice, logicalDevice, sizeof( outputData ) );
 
-        const auto mappedInputMemory = logicalDevice.device->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
+        const auto mappedInputMemory = logicalDevice->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
         std::memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
-        logicalDevice.device->unmapMemory( *inputBuffer.memory );
+        logicalDevice->unmapMemory( *inputBuffer.memory );
 
         const auto computeShader = createShaderModule( logicalDevice, "./shaders/compute.comp.spv" );
 
@@ -453,7 +454,7 @@ auto main() -> int
         const auto allocateInfo = vk::DescriptorSetAllocateInfo{}
             .setSetLayouts( *descriptorSetLayout )
             .setDescriptorPool( *descriptorPool );
-        const auto descriptorSets = logicalDevice.device->allocateDescriptorSets( allocateInfo );
+        const auto descriptorSets = logicalDevice->allocateDescriptorSets( allocateInfo );
 
         const auto bufferInfos = std::vector< vk::DescriptorBufferInfo >{
             vk::DescriptorBufferInfo{}
@@ -473,9 +474,9 @@ auto main() -> int
             .setDescriptorType( vk::DescriptorType::eStorageBuffer )
             .setBufferInfo( bufferInfos );
 
-        logicalDevice.device->updateDescriptorSets( writeDescriptorSet, {} );
+        logicalDevice->updateDescriptorSets( writeDescriptorSet, {} );
 
-        const auto commandPool = logicalDevice.device->createCommandPoolUnique(
+        const auto commandPool = logicalDevice->createCommandPoolUnique(
             vk::CommandPoolCreateInfo{}.setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
         );
 
@@ -483,7 +484,7 @@ auto main() -> int
             .setCommandPool( *commandPool )
             .setLevel( vk::CommandBufferLevel::ePrimary )
             .setCommandBufferCount( 1 );
-        const auto commandBuffer = logicalDevice.device->allocateCommandBuffers( commandBufferAllocateInfo )[0];
+        const auto commandBuffer = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo )[0];
 
         const auto beginInfo = vk::CommandBufferBeginInfo{}
             .setFlags( vk::CommandBufferUsageFlagBits::eOneTimeSubmit );
