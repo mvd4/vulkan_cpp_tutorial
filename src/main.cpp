@@ -484,6 +484,12 @@ auto main() -> int
             .setLevel( vk::CommandBufferLevel::ePrimary )
             .setCommandBufferCount( 1 );
         const auto commandBuffer = logicalDevice.device->allocateCommandBuffers( commandBufferAllocateInfo )[0];
+
+        const auto beginInfo = vk::CommandBufferBeginInfo{}
+            .setFlags( vk::CommandBufferUsageFlagBits::eOneTimeSubmit );
+        commandBuffer.begin( beginInfo );
+
+        commandBuffer.end();
     }
     catch( const std::exception& e )
     {

@@ -102,6 +102,60 @@ const auto commandBuffer = logicalDevice.device->allocateCommandBuffers( command
 ```
 The allocation function always returns a vector but we only have one buffer. We therefore just take the only element from that vector right away to make the following code more concise.
 
+## Preparing the Command Buffer
+Alright, we have the command buffer now so let's prepare it for recording our commands. We do this by using the `begin` function:
+```cpp
+class CommandBuffer
+{
+    ...
+    void begin( const CommandBufferBeginInfo& beginInfo, ... ) const noexcept;
+    ...
+};
+```
+... with:
+```cpp
+struct CommandBufferBeginInfo
+{
+    ...
+    CommandBufferBeginInfo& setFlags( vk::CommandBufferUsageFlags flags_ );
+    CommandBufferBeginInfo& setPInheritanceInfo( const vk::CommandBufferInheritanceInfo* pInheritanceInfo_ );
+    ...
+};
+```
+The flags are actually relevant this time, as we have to use them to tell Vulkan how we intend to use this command buffer:
+- `vk::CommandBufferUsageFlagBits::eOneTimeSubmit`: This flag being set indicates that the command buffer will only be submitted once. Before any subsequent submit, the commands in it will have been re-recorded. The absence of this flag indicates that the buffer may be re-submitted.
+- `vk::CommandBufferUsageFlagBits::eRenderPassContinue`: This one is only relevant for secondary command buffers and ignored for primary ones. It indicates that this command buffer will be used within a render pass[^2].
+- `vk::CommandBufferUsageFlagBits::eSimultaneousUse`: This indicates that the command buffer might be used multiple times in parallel.
+
+The inheritance info on the other hand is related to command buffer inheritance which we will not cover for now and so we can ignore this parameter.
+
+Once we're done adding commands to the buffer we have to stop recording. That is simple:
+```cpp
+class CommandBuffer
+{
+    ...
+    void end( ... ) const;
+    ...
+};
+```
+
+Putting that together we can prepare our command buffer for recording like this:
+```cpp
+const auto beginInfo = vk::CommandBufferBeginInfo{}
+    .setFlags( vk::CommandBufferUsageFlagBits::eOneTimeSubmit );
+commandBuffer.begin( beginInfo );
+
+// record commands here
+
+commandBuffer.end();
+```
+
+The command buffer is ready to take in commands now. We'll do that in the next lesson, so for now there will still not be any output when you run the program. But we're getting close, so stay tuned.
+
 ---
 
 [^1]: If you want to get away with less refactoring or fewer custom types, you could make the return value a tuple of device and queue index. On the call side you could then use C++17 structured bindings to decompose those two again. That would be a totally valid approach, I just feel that the queue index and the logical device are semantically so connected that it justifies coupling them in a dedicated type.
+[^2]: A render pass is a concept that becomes relevant when we create the graphics pipeline. We'll get into more detail when we get there.
+
+Further reading:
+- [Vulkan vs OpenGL Part 2 — a high-level comparison of the two APIs](https://cybertic.cz/vulkan-vs-opengl-part-2/)
