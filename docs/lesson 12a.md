@@ -164,6 +164,40 @@ namespace vcpp
 ```
 (Don't forget to add the new files to `CMakeLists.txt`)
 
+The rest of the code in `main.cpp` is related to the creation of our compute pipeline, so let's put that in a `pipelines` source file pair:
+```cpp
+#pragma once
+
+#include <vulkan/vulkan.hpp>
+
+#include <filesystem>
+
+namespace vcpp
+{
+    auto createShaderModule(
+        const vk::Device& logicalDevice,
+        const std::filesystem::path& path
+    ) -> vk::UniqueShaderModule;
+
+    auto createDescriptorSetLayout( const vk::Device& logicalDevice ) -> vk::UniqueDescriptorSetLayout;
+
+    auto createPipelineLayout(
+        const vk::Device& logicalDevice,
+        const vk::DescriptorSetLayout& descriptorSetLayout
+    ) -> vk::UniquePipelineLayout;
+
+    auto createComputePipeline(
+        const vk::Device& logicalDevice,
+        const vk::PipelineLayout& pipelineLayout,
+        const vk::ShaderModule& computeShader
+    ) -> vk::UniquePipeline;
+
+    auto createDescriptorPool( const vk::Device& logicalDevice ) -> vk::UniqueDescriptorPool;
+}
+```
+
+And that's already it. Compile and run the project once more to make sure we have a working state as a starting point for the next lesson.
+
 ---
 
 [^1]: Yes, we probably will have to make those functions more generic in the future, but I usually go with the YAGNI principle and only generalize as much as I need it at that point.
