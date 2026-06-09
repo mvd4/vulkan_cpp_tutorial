@@ -510,6 +510,17 @@ auto main() -> int
         queue.submit( submitInfo );
 
         logicalDevice.device->waitIdle();
+
+        const auto mappedOutputMemory = logicalDevice.device->mapMemory( *outputBuffer.memory, 0, sizeof( outputData ) );
+        std::memcpy( outputData.data(), mappedOutputMemory, sizeof( outputData ) );
+        logicalDevice.device->unmapMemory( *outputBuffer.memory );
+
+        for ( size_t i = 0; i < outputData.size(); ++i )
+        {
+            std::cout << outputData[i] << ";\t";
+            if ( ( i % 16 ) == 15 )
+                std::cout << "\n";
+        }
     }
     catch( const std::exception& e )
     {

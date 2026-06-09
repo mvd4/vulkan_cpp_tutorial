@@ -174,4 +174,23 @@ This function only returns when the logical device has finished all the work. Yo
 
 Congratulations!
 
-You've just run your first Vulkan program on the GPU.
+You've just run your first Vulkan program on the GPU. The experience is probably a bit underwhelming though because you don't see any results. Let's change that.
+
+We already have the GPU buffer for the output data in place. And if everything worked as expected this should also already contain our computation results. Which means that the only thing missing for us too actually get hold of the results is transferring this data back to main memory. This is essentially the same as we did when we uploaded the input data to the GPU buffer, so I'll just post the code here:
+```cpp
+const auto mappedOutputMemory = logicalDevice.device->mapMemory( *outputBuffer.memory, 0, sizeof( outputData ) );
+std::memcpy( outputData.data(), mappedOutputMemory, sizeof( outputData ) );
+logicalDevice.device->unmapMemory( *outputBuffer.memory );
+```
+And now finally we can print the data to the console:
+```cpp
+for( size_t i = 0; i < outputData.size(); ++i )
+{
+    std::cout << outputData[i] << ";\t";
+    if ( ( i % 16 ) == 15 )
+        std::cout << "\n";
+}
+```
+Now you should see the output values that confirm that the GPU indeed executed our shader on every data point in the input buffer. At this point it might be a good idea to play around a bit with the shader and the workgroup sizes to get a feel for how they behave.
+
+In the next lesson I want to show you an important technique related to the memory buffers before we finally get going with graphics programming.
