@@ -35,6 +35,75 @@ auto copyDataFromBuffer(
 ```
 That alone doesn't help too much with the code duplication, I know. Still, the calling code becomes much more concise and we have reduced the potential for errors in terms of the number of bytes to copy, the order of arguments to `std::memcpy` or forgetting to unmap the memory[^1].
 
+We will also have to work with command buffers and descriptors again, but at this point I do not see an obvious thing to extract from `main()`. If you want to keep the code for reference, feel free to comment it out and leave it in the file. My personal opinion here is that this is what we have git for, so I'll just go ahead now and delete everything after the logical device creation:
+```cpp
+int main()
+{
+    try
+    {
+        const auto instance = vcpp::createVulkanInstance();
+        const auto physicalDevice = vcpp::selectPhysicalDevice( *instance );
+        const auto logicalDevice = vcpp::createLogicalDevice( physicalDevice );
+    }
+    catch( const std::exception& e )
+    {
+        std::cerr << "Exception thrown: " << e.what() << "\n";
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
+}
+```
+I'd say that looks clean enough, but we still have all that code above it. There's a lot in there that we'll be able to re-use so I don't want to simply delete it. Let's instead give the project a bit of structure.
+
+I suggest to start by creating a source code file pair for everything related to the Vulkan instance and devices. `devices.hpp` should look something like this:
+```cpp
+#pragma once
+
+#include <vulkan/vulkan.hpp>
+
+namespace vcpp
+{
+    struct LogicalDevice
+    {
+        vk::UniqueDevice device;
+        std::uint32_t queueFamilyIndex;
+
+        operator const vk::Device&() const { return *device; }
+    };
+
+    auto printLayerProperties( const std::vector< vk::LayerProperties >& layers ) -> void;
+
+    auto printExtensionProperties( const std::vector< vk::ExtensionProperties >& extensions ) -> void;
+
+    auto createVulkanInstance() -> vk::UniqueInstance;
+
+    auto printPhysicalDeviceProperties( const vk::PhysicalDevice& device ) -> void;
+
+    auto selectPhysicalDevice( const vk::Instance& instance ) -> vk::PhysicalDevice;
+
+    auto printQueueFamilyProperties( const vk::QueueFamilyProperties& props, std::uint32_t index ) -> void;
+
+    auto findSuitableQueueFamily(
+        const std::vector< vk::QueueFamilyProperties >& queueFamilies,
+        vk::QueueFlags requiredFlags
+    ) -> std::uint32_t;
+
+    auto getRequiredDeviceExtensions(
+        const std::vector< vk::ExtensionProperties >& availableExtensions
+    ) -> std::vector< const char* >;
+
+    auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> LogicalDevice;
+}
+```
+As you can see, I also wrapped our code in a namespace[^2]. This is good practice and will help us keeping our code unambiguous in the future. I'm not going to show the corresponding `.cpp` file here, I'm sure you can figure those out by yourself.
+
+And of course we have to add the new files to our `CMakeLists.txt` to actually include them in the project:
+```cmake
+target_sources( ${PROJECT_NAME} PRIVATE devices.cpp  devices.hpp )
+```
+
 ---
 
 [^1]: Yes, we probably will have to make those functions more generic in the future, but I usually go with the YAGNI principle and only generalize as much as I need it at that point.
+
+[^2]: `vcpp` for Vulkan C++

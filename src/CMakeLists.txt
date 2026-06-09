@@ -4,6 +4,9 @@ find_package( Vulkan REQUIRED COMPONENTS glslc )
 
 add_executable( ${TARGET_NAME} main.cpp )
 
+target_sources( ${PROJECT_NAME} PRIVATE devices.cpp  devices.hpp )
+
+
 target_compile_features( ${TARGET_NAME} PRIVATE cxx_std_20 )
 set_target_properties( ${TARGET_NAME} PROPERTIES
     CXX_EXTENSIONS OFF
