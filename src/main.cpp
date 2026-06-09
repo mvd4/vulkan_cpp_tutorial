@@ -266,7 +266,7 @@ auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> LogicalD
 
     const auto queueFamilyIndex = findSuitableQueueFamily(
         queueFamilies,
-        vk::QueueFlagBits::eCompute
+        vk::QueueFlagBits::eCompute | vk::QueueFlagBits::eTransfer
     );
     std::cout << "\nSelected queue family index: " << queueFamilyIndex << "\n";
 
@@ -286,7 +286,7 @@ auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> LogicalD
         .setPEnabledExtensionNames( enabledDeviceExtensions );
 
     return LogicalDevice{
-        physicalDevice.createDeviceUnique( deviceCreateInfo ),
+        std::move( physicalDevice.createDeviceUnique( deviceCreateInfo ) ),
         queueFamilyIndex
     };
 }
@@ -318,19 +318,20 @@ auto findSuitableMemoryIndex(
 auto createGPUBuffer(
     const vk::PhysicalDevice& physicalDevice,
     const vk::Device& logicalDevice,
-    vk::DeviceSize size
+    std::uint64_t size,
+    vk::BufferUsageFlags usageFlags = vk::BufferUsageFlagBits::eStorageBuffer,
+    vk::MemoryPropertyFlags requiredMemoryFlags =
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
 ) -> GPUBuffer
 {
     const auto bufferCreateInfo = vk::BufferCreateInfo{}
         .setSize( size )
-        .setUsage( vk::BufferUsageFlagBits::eStorageBuffer )
+        .setUsage( usageFlags )
         .setSharingMode( vk::SharingMode::eExclusive );
     auto buffer = logicalDevice.createBufferUnique( bufferCreateInfo );
 
     const auto memoryRequirements = logicalDevice.getBufferMemoryRequirements( *buffer );
     const auto memoryProperties = physicalDevice.getMemoryProperties();
-    const auto requiredMemoryFlags =
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
 
     const auto memoryIndex = findSuitableMemoryIndex(
         memoryProperties,
@@ -444,12 +445,25 @@ auto main() -> int
 
         auto outputData = std::array< float, numElements >{};
 
-        const auto inputBuffer = createGPUBuffer( physicalDevice, logicalDevice, sizeof( inputData ) );
+        const auto inputStagingBuffer = createGPUBuffer(
+            physicalDevice,
+            logicalDevice,
+            sizeof( inputData ),
+            vk::BufferUsageFlagBits::eTransferSrc
+        );
+        const auto inputGPUBuffer = createGPUBuffer(
+            physicalDevice,
+            logicalDevice,
+            sizeof( inputData ),
+            vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+
         const auto outputBuffer = createGPUBuffer( physicalDevice, logicalDevice, sizeof( outputData ) );
 
-        const auto mappedInputMemory = logicalDevice->mapMemory( *inputBuffer.memory, 0, sizeof( inputData ) );
+        const auto mappedInputMemory = logicalDevice.device->mapMemory( *inputStagingBuffer.memory, 0, sizeof( inputData ) );
         std::memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
-        logicalDevice->unmapMemory( *inputBuffer.memory );
+        logicalDevice.device->unmapMemory( *inputStagingBuffer.memory );
 
         const auto computeShader = createShaderModule( logicalDevice, "./shaders/compute.comp.spv" );
 
@@ -465,7 +479,7 @@ auto main() -> int
 
         const auto bufferInfos = std::vector< vk::DescriptorBufferInfo >{
             vk::DescriptorBufferInfo{}
-                .setBuffer( *inputBuffer.buffer )
+                .setBuffer( *inputGPUBuffer.buffer )
                 .setOffset( 0 )
                 .setRange( sizeof( inputData ) ),
             vk::DescriptorBufferInfo{}
@@ -499,6 +513,29 @@ auto main() -> int
 
         commandBuffer.bindPipeline( vk::PipelineBindPoint::eCompute, *pipeline );
         commandBuffer.bindDescriptorSets( vk::PipelineBindPoint::eCompute, *pipelineLayout, 0, descriptorSets, {} );
+        commandBuffer.copyBuffer(
+            *inputStagingBuffer.buffer,
+            *inputGPUBuffer.buffer,
+            vk::BufferCopy{}.setSize( sizeof( inputData ) )
+        );
+
+        const auto bufferBarrier = vk::BufferMemoryBarrier{}
+            .setSrcAccessMask( vk::AccessFlagBits::eTransferWrite )
+            .setDstAccessMask( vk::AccessFlagBits::eShaderRead )
+            .setSrcQueueFamilyIndex( vk::QueueFamilyIgnored )
+            .setDstQueueFamilyIndex( vk::QueueFamilyIgnored )
+            .setBuffer( *inputGPUBuffer.buffer )
+            .setOffset( 0 )
+            .setSize( sizeof( inputData ) );
+        commandBuffer.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {},
+            {},
+            bufferBarrier,
+            {}
+        );
+
         commandBuffer.dispatch( 8, 1, 1 );
 
         commandBuffer.end();
