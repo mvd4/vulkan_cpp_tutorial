@@ -216,7 +216,7 @@ auto createComputePipeline(
     return logicalDevice.createComputePipelineUnique( vk::PipelineCache{}, pipelineCreateInfo ).value;
 }
 
-int main()
+auto main() -> int
 {
     try
     {
