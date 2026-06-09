@@ -461,9 +461,9 @@ auto main() -> int
 
         const auto outputBuffer = createGPUBuffer( physicalDevice, logicalDevice, sizeof( outputData ) );
 
-        const auto mappedInputMemory = logicalDevice.device->mapMemory( *inputStagingBuffer.memory, 0, sizeof( inputData ) );
+        const auto mappedInputMemory = logicalDevice->mapMemory( *inputStagingBuffer.memory, 0, sizeof( inputData ) );
         std::memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
-        logicalDevice.device->unmapMemory( *inputStagingBuffer.memory );
+        logicalDevice->unmapMemory( *inputStagingBuffer.memory );
 
         const auto computeShader = createShaderModule( logicalDevice, "./shaders/compute.comp.spv" );
 

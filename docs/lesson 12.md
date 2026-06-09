@@ -70,7 +70,7 @@ const auto inputStagingBuffer = createGPUBuffer(
     vk::BufferUsageFlagBits::eTransferSrc
 );
 ```
-As you can see I've renamed the variable to make its intended usage as clear as possible. Obviously I need to refactor the code that references the input buffer accordingly.
+Note what happened here: where we previously had a single input buffer, we now have two — a host-visible `inputStagingBuffer` that we can upload our data to, and a device-local `inputGPUBuffer` that the shader will actually read from. I've named them accordingly to make their intended usage as clear as possible. Obviously I need to refactor the code that references the input buffer accordingly, so the host-visible upload now targets `inputStagingBuffer`.
 
 Since we want our shader to operate on the device local GPU buffer now, we need to update our descriptor set, more exactly the buffer info for the `writeDescriptorSet`, accordingly:
 ```cpp
@@ -135,6 +135,8 @@ commandBuffer.pipelineBarrier(
 The `srcAccessMask` and `dstAccessMask` specify what kind of memory access needs to be synchronized. The first two arguments to `pipelineBarrier` specify the source and destination pipeline stages — in our case, we want the transfer stage to complete before the compute shader stage begins. Without this barrier, the compute shader could start reading from the buffer before the copy has finished, leading to undefined results.
 
 The copying and the barrier can happen before we bind the pipeline, or even after we've bound the descriptor sets — remember, the descriptor set essentially tells the pipeline where to find the data and in which format it is. The actual memory is only accessed once the shader program is dispatched, so as long as the data is there and properly synchronized when that happens, all is good. If you run the program now, you should see the correct results as before.
+
+Note that we only staged the input buffer here — the output buffer is still host-visible so we can read the results back directly. If you wanted to, you could apply the exact same technique in reverse: compute into a device-local buffer, then copy it back into a host-visible staging buffer before mapping it. I'll leave that as an exercise for you.
 
 Whether or not this technique actually produces a speedup depends on your concrete use case. Creating the additional buffer takes time, so does the data transfer between the buffers. The specific GPU and its memory layout will also have an impact. If you only have a small data set, and/or you access the data only once, it might actually be faster to just go with the plain host-visible buffers. If your buffer holds data that is uploaded once and then used over and over again, you'll almost certainly get a speedup. As always when trying to optimize performance, you'll need to measure to be able to assess the impact.
 
