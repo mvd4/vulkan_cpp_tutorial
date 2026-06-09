@@ -19,7 +19,12 @@ License.
 
 #include "devices.hpp"
 
+#include <algorithm>
+#include <cassert>
 #include <iostream>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 namespace {
 

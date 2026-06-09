@@ -37,7 +37,7 @@ That alone doesn't help too much with the code duplication, I know. Still, the c
 
 We will also have to work with command buffers and descriptors again, but at this point I do not see an obvious thing to extract from `main()`. If you want to keep the code for reference, feel free to comment it out and leave it in the file. My personal opinion here is that this is what we have git for, so I'll just go ahead now and delete everything after the logical device creation:
 ```cpp
-int main()
+auto main() -> int
 {
     try
     {
@@ -69,6 +69,7 @@ namespace vcpp
         std::uint32_t queueFamilyIndex;
 
         operator const vk::Device&() const { return *device; }
+        const vk::Device* operator->() const { return &*device; }
     };
 
     auto printLayerProperties( const std::vector< vk::LayerProperties >& layers ) -> void;
@@ -99,7 +100,7 @@ As you can see, I also wrapped our code in a namespace[^2]. This is good practic
 
 And of course we have to add the new files to our `CMakeLists.txt` to actually include them in the project:
 ```cmake
-target_sources( ${PROJECT_NAME} PRIVATE devices.cpp  devices.hpp )
+target_sources( ${TARGET_NAME} PRIVATE devices.cpp  devices.hpp )
 ```
 
 Okay, let's now do the same for all the code that we have relating to memory and buffer management and put that in a separate source file pair. Here's `memory.hpp`:

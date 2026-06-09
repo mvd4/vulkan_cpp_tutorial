@@ -19,7 +19,11 @@ License.
 
 #include "pipelines.hpp"
 
+#include <array>
+#include <cstdint>
 #include <fstream>
+#include <stdexcept>
+#include <vector>
 
 namespace vcpp
 {

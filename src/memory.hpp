@@ -21,6 +21,9 @@ License.
 
 #include <vulkan/vulkan.hpp>
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 
 namespace vcpp

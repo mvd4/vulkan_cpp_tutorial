@@ -19,6 +19,9 @@ License.
 
 #include "memory.hpp"
 
+#include <stdexcept>
+#include <utility>
+
 
 namespace vcpp
 {
