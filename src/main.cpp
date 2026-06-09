@@ -430,6 +430,31 @@ auto createDescriptorPool( const vk::Device& logicalDevice ) -> vk::UniqueDescri
     return logicalDevice.createDescriptorPoolUnique( poolCreateInfo );
 }
 
+template< typename T, size_t N >
+auto copyDataToBuffer(
+    const vk::Device& logicalDevice,
+    const std::array< T, N >& data,
+    const GPUBuffer& buffer
+) -> void
+{
+    const auto numBytesToCopy = sizeof( data );
+    const auto mappedMemory = logicalDevice.mapMemory( *buffer.memory, 0, numBytesToCopy );
+    std::memcpy( mappedMemory, data.data(), numBytesToCopy );
+    logicalDevice.unmapMemory( *buffer.memory );
+}
+
+template< typename T, size_t N >
+auto copyDataFromBuffer(
+    const vk::Device& logicalDevice,
+    const GPUBuffer& buffer,
+    std::array< T, N >& data
+) -> void
+{
+    const auto numBytesToCopy = sizeof( data );
+    const auto mappedMemory = logicalDevice.mapMemory( *buffer.memory, 0, numBytesToCopy );
+    std::memcpy( data.data(), mappedMemory, numBytesToCopy );
+    logicalDevice.unmapMemory( *buffer.memory );
+}
 
 auto main() -> int
 {
@@ -461,9 +486,7 @@ auto main() -> int
 
         const auto outputBuffer = createGPUBuffer( physicalDevice, logicalDevice, sizeof( outputData ) );
 
-        const auto mappedInputMemory = logicalDevice->mapMemory( *inputStagingBuffer.memory, 0, sizeof( inputData ) );
-        std::memcpy( mappedInputMemory, inputData.data(), sizeof( inputData ) );
-        logicalDevice->unmapMemory( *inputStagingBuffer.memory );
+        copyDataToBuffer( logicalDevice, inputData, inputStagingBuffer );
 
         const auto computeShader = createShaderModule( logicalDevice, "./shaders/compute.comp.spv" );
 
@@ -548,9 +571,7 @@ auto main() -> int
 
         logicalDevice->waitIdle();
 
-        const auto mappedOutputMemory = logicalDevice->mapMemory( *outputBuffer.memory, 0, sizeof( outputData ) );
-        std::memcpy( outputData.data(), mappedOutputMemory, sizeof( outputData ) );
-        logicalDevice->unmapMemory( *outputBuffer.memory );
+        copyDataFromBuffer( logicalDevice, outputBuffer, outputData );
 
         for ( size_t i = 0; i < outputData.size(); ++i )
         {
