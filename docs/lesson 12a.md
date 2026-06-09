@@ -102,6 +102,68 @@ And of course we have to add the new files to our `CMakeLists.txt` to actually i
 target_sources( ${PROJECT_NAME} PRIVATE devices.cpp  devices.hpp )
 ```
 
+Okay, let's now do the same for all the code that we have relating to memory and buffer management and put that in a separate source file pair. Here's `memory.hpp`:
+```cpp
+#pragma once
+
+#include <vulkan/vulkan.hpp>
+
+#include <cstring>
+
+namespace vcpp
+{
+    struct GPUBuffer
+    {
+        vk::UniqueBuffer buffer;
+        vk::UniqueDeviceMemory memory;
+    };
+
+
+    auto findSuitableMemoryIndex(
+        const vk::PhysicalDeviceMemoryProperties& memoryProperties,
+        std::uint32_t allowedTypesMask,
+        vk::MemoryPropertyFlags requiredMemoryFlags
+    ) -> std::uint32_t;
+
+
+    auto createGPUBuffer(
+        const vk::PhysicalDevice& physicalDevice,
+        const vk::Device& logicalDevice,
+        std::uint64_t size,
+        vk::BufferUsageFlags usageFlags = vk::BufferUsageFlagBits::eStorageBuffer,
+        vk::MemoryPropertyFlags requiredMemoryFlags =
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    ) -> GPUBuffer;
+
+    template< typename T, size_t N >
+    auto copyDataToBuffer(
+        const vk::Device& logicalDevice,
+        const std::array< T, N >& data,
+        const GPUBuffer& buffer
+    ) -> void
+    {
+        const auto numBytesToCopy = sizeof( data );
+        const auto mappedMemory = logicalDevice.mapMemory( *buffer.memory, 0, numBytesToCopy );
+        std::memcpy( mappedMemory, data.data(), numBytesToCopy );
+        logicalDevice.unmapMemory( *buffer.memory );
+    }
+
+    template< typename T, size_t N >
+    auto copyDataFromBuffer(
+        const vk::Device& logicalDevice,
+        const GPUBuffer& buffer,
+        std::array< T, N >& data
+    ) -> void
+    {
+        const auto numBytesToCopy = sizeof( data );
+        const auto mappedMemory = logicalDevice.mapMemory( *buffer.memory, 0, numBytesToCopy );
+        std::memcpy( data.data(), mappedMemory, numBytesToCopy );
+        logicalDevice.unmapMemory( *buffer.memory );
+    }
+}
+```
+(Don't forget to add the new files to `CMakeLists.txt`)
+
 ---
 
 [^1]: Yes, we probably will have to make those functions more generic in the future, but I usually go with the YAGNI principle and only generalize as much as I need it at that point.

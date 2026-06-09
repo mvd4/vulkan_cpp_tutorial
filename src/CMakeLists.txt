@@ -5,6 +5,7 @@ find_package( Vulkan REQUIRED COMPONENTS glslc )
 add_executable( ${TARGET_NAME} main.cpp )
 
 target_sources( ${PROJECT_NAME} PRIVATE devices.cpp  devices.hpp )
+target_sources( ${PROJECT_NAME} PRIVATE memory.cpp  memory.hpp )
 
 
 target_compile_features( ${TARGET_NAME} PRIVATE cxx_std_20 )

@@ -18,6 +18,7 @@ License.
 ***************************************************************************************************/
 
 #include "devices.hpp"
+#include "memory.hpp"
 
 #include <algorithm>
 #include <array>
@@ -33,69 +34,6 @@ License.
 #include <vector>
 
 
-struct GPUBuffer
-{
-    vk::UniqueBuffer buffer;
-    vk::UniqueDeviceMemory memory;
-};
-
-auto findSuitableMemoryIndex(
-    const vk::PhysicalDeviceMemoryProperties& memoryProperties,
-    std::uint32_t allowedTypesMask,
-    vk::MemoryPropertyFlags requiredMemoryFlags
-) -> std::uint32_t
-{
-    for(
-        std::uint32_t memoryType = 1, i = 0;
-        i < memoryProperties.memoryTypeCount;
-        ++i, memoryType <<= 1
-    )
-    {
-        if(
-            ( allowedTypesMask & memoryType ) > 0 &&
-            ( ( memoryProperties.memoryTypes[ i ].propertyFlags & requiredMemoryFlags ) == requiredMemoryFlags )
-        )
-        {
-            return i;
-        }
-    }
-
-    throw std::runtime_error( "could not find suitable gpu memory" );
-}
-
-auto createGPUBuffer(
-    const vk::PhysicalDevice& physicalDevice,
-    const vk::Device& logicalDevice,
-    std::uint64_t size,
-    vk::BufferUsageFlags usageFlags = vk::BufferUsageFlagBits::eStorageBuffer,
-    vk::MemoryPropertyFlags requiredMemoryFlags =
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
-) -> GPUBuffer
-{
-    const auto bufferCreateInfo = vk::BufferCreateInfo{}
-        .setSize( size )
-        .setUsage( usageFlags )
-        .setSharingMode( vk::SharingMode::eExclusive );
-    auto buffer = logicalDevice.createBufferUnique( bufferCreateInfo );
-
-    const auto memoryRequirements = logicalDevice.getBufferMemoryRequirements( *buffer );
-    const auto memoryProperties = physicalDevice.getMemoryProperties();
-
-    const auto memoryIndex = findSuitableMemoryIndex(
-        memoryProperties,
-        memoryRequirements.memoryTypeBits,
-        requiredMemoryFlags );
-
-    const auto allocateInfo = vk::MemoryAllocateInfo{}
-        .setAllocationSize( memoryRequirements.size )
-        .setMemoryTypeIndex( memoryIndex );
-
-    auto memory = logicalDevice.allocateMemoryUnique( allocateInfo );
-
-    logicalDevice.bindBufferMemory( *buffer, *memory, 0u );
-
-    return { std::move( buffer ), std::move( memory ) };
-}
 
 auto createShaderModule(
     const vk::Device& logicalDevice,
@@ -178,31 +116,6 @@ auto createDescriptorPool( const vk::Device& logicalDevice ) -> vk::UniqueDescri
     return logicalDevice.createDescriptorPoolUnique( poolCreateInfo );
 }
 
-template< typename T, size_t N >
-auto copyDataToBuffer(
-    const vk::Device& logicalDevice,
-    const std::array< T, N >& data,
-    const GPUBuffer& buffer
-) -> void
-{
-    const auto numBytesToCopy = sizeof( data );
-    const auto mappedMemory = logicalDevice.mapMemory( *buffer.memory, 0, numBytesToCopy );
-    std::memcpy( mappedMemory, data.data(), numBytesToCopy );
-    logicalDevice.unmapMemory( *buffer.memory );
-}
-
-template< typename T, size_t N >
-auto copyDataFromBuffer(
-    const vk::Device& logicalDevice,
-    const GPUBuffer& buffer,
-    std::array< T, N >& data
-) -> void
-{
-    const auto numBytesToCopy = sizeof( data );
-    const auto mappedMemory = logicalDevice.mapMemory( *buffer.memory, 0, numBytesToCopy );
-    std::memcpy( data.data(), mappedMemory, numBytesToCopy );
-    logicalDevice.unmapMemory( *buffer.memory );
-}
 
 auto main() -> int
 {
