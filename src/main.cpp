@@ -390,9 +390,19 @@ auto createDescriptorSetLayout( const vk::Device& logicalDevice ) -> vk::UniqueD
     return logicalDevice.createDescriptorSetLayoutUnique( descriptorSetLayoutCreateInfo );
 }
 
+auto createPipelineLayout(
+    const vk::Device& logicalDevice,
+    const vk::DescriptorSetLayout& descriptorSetLayout
+) -> vk::UniquePipelineLayout
+{
+    const auto pipelineLayoutCreateInfo = vk::PipelineLayoutCreateInfo{}
+        .setSetLayouts( descriptorSetLayout );
+    return logicalDevice.createPipelineLayoutUnique( pipelineLayoutCreateInfo );
+}
+
 auto createComputePipeline(
     const vk::Device& logicalDevice,
-    const vk::DescriptorSetLayout& descriptorSetLayout,
+    const vk::PipelineLayout& pipelineLayout,
     const vk::ShaderModule& computeShader
 ) -> vk::UniquePipeline
 {
@@ -401,13 +411,9 @@ auto createComputePipeline(
         .setPName( "main" )
         .setModule( computeShader );
 
-    const auto pipelineLayoutCreateInfo = vk::PipelineLayoutCreateInfo{}
-        .setSetLayouts( descriptorSetLayout );
-    const auto pipelineLayout = logicalDevice.createPipelineLayoutUnique( pipelineLayoutCreateInfo );
-
     const auto pipelineCreateInfo = vk::ComputePipelineCreateInfo{}
         .setStage( shaderStageInfo )
-        .setLayout( *pipelineLayout );
+        .setLayout( pipelineLayout );
 
     return logicalDevice.createComputePipelineUnique( vk::PipelineCache{}, pipelineCreateInfo ).value;
 }
@@ -448,7 +454,8 @@ auto main() -> int
         const auto computeShader = createShaderModule( logicalDevice, "./shaders/compute.comp.spv" );
 
         const auto descriptorSetLayout = createDescriptorSetLayout( logicalDevice );
-        const auto pipeline = createComputePipeline( logicalDevice, *descriptorSetLayout, *computeShader );
+        const auto pipelineLayout = createPipelineLayout( logicalDevice, *descriptorSetLayout );
+        const auto pipeline = createComputePipeline( logicalDevice, *pipelineLayout, *computeShader );
 
         const auto descriptorPool = createDescriptorPool( logicalDevice );
         const auto allocateInfo = vk::DescriptorSetAllocateInfo{}
@@ -489,6 +496,10 @@ auto main() -> int
         const auto beginInfo = vk::CommandBufferBeginInfo{}
             .setFlags( vk::CommandBufferUsageFlagBits::eOneTimeSubmit );
         commandBuffer.begin( beginInfo );
+
+        commandBuffer.bindPipeline( vk::PipelineBindPoint::eCompute, *pipeline );
+        commandBuffer.bindDescriptorSets( vk::PipelineBindPoint::eCompute, *pipelineLayout, 0, descriptorSets, {} );
+        commandBuffer.dispatch( 8, 1, 1 );
 
         commandBuffer.end();
     }
