@@ -503,17 +503,17 @@ auto main() -> int
 
         commandBuffer.end();
 
-        const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
+        const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
         const auto submitInfo = vk::SubmitInfo{}
             .setCommandBuffers( commandBuffer );
         queue.submit( submitInfo );
 
-        logicalDevice.device->waitIdle();
+        logicalDevice->waitIdle();
 
-        const auto mappedOutputMemory = logicalDevice.device->mapMemory( *outputBuffer.memory, 0, sizeof( outputData ) );
+        const auto mappedOutputMemory = logicalDevice->mapMemory( *outputBuffer.memory, 0, sizeof( outputData ) );
         std::memcpy( outputData.data(), mappedOutputMemory, sizeof( outputData ) );
-        logicalDevice.device->unmapMemory( *outputBuffer.memory );
+        logicalDevice->unmapMemory( *outputBuffer.memory );
 
         for ( size_t i = 0; i < outputData.size(); ++i )
         {

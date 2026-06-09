@@ -51,7 +51,7 @@ class CommandBuffer
 ```
 We talked about dispatching global workgroups already a bit in the lesson about shaders. What we're doing with this command is to start a global workgroup that consists of `groupCountX * groupCountY * groupCountZ` local workgroups. As with the local workgroups themselves, the 3-dimensional organization of the global workgroup is more or less pure convenience.
 
-So how do we structure our global workgroup? We have a dataset of 500 values that need to be processed. In our shader code we specified the local workgroup size to be 64 invocations. Which means we need `ceil(500/64) = 8` local workgroups, covering 512 invocations in total. The shader's bounds check (`processingIndex >= BUFFER_SIZE`) ensures the 12 extra invocations exit early without touching out-of-bounds memory. We also only used the x dimension of `gl_WorkGroupID` when calculating the index in the dataset in our shader code. We therefore need to make `groupCountX = 8` and set the other two parameters to 1.
+So how do we structure our global workgroup? We have a dataset of 500 values that need to be processed. In our shader code we specified the local workgroup size to be 64 invocations. Which means we need `ceil(500/64) = 8` local workgroups, covering 512 invocations in total. The shader's bounds check (`processingIndex >= BUFFER_SIZE`) ensures the 12 extra invocations exit early without touching out-of-bounds memory. We also only used the x dimension of `gl_GlobalInvocationID` when calculating the index in the dataset in our shader code. We therefore need to make `groupCountX = 8` and set the other two parameters to 1.
 
 Okay, that turned out to be easier than we thought, right? Let's convert our pseudo code into code that works. One minor challenge is that we encapsulated the pipeline layout in the pipeline creation function. So we need to pull it out:
 ```cpp
@@ -85,7 +85,7 @@ auto createComputePipeline(
 ```
 And with that we can record our commands into the buffer, so the relevant parts of `main` look like this now:
 ```cpp
-int main()
+auto main() -> int
 {
     try
     {
@@ -145,7 +145,7 @@ That looks a bit intimidating. The first parameter is clear enough, but what abo
 
 Which means we can actually now submit our program to the GPU:
 ```cpp
-const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
+const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
 const auto submitInfo = vk::SubmitInfo{}
     .setCommandBuffers( commandBuffer );
@@ -178,9 +178,9 @@ You've just run your first Vulkan program on the GPU. The experience is probably
 
 We already have the GPU buffer for the output data in place. And if everything worked as expected this should also already contain our computation results. Which means that the only thing missing for us too actually get hold of the results is transferring this data back to main memory. This is essentially the same as we did when we uploaded the input data to the GPU buffer, so I'll just post the code here:
 ```cpp
-const auto mappedOutputMemory = logicalDevice.device->mapMemory( *outputBuffer.memory, 0, sizeof( outputData ) );
+const auto mappedOutputMemory = logicalDevice->mapMemory( *outputBuffer.memory, 0, sizeof( outputData ) );
 std::memcpy( outputData.data(), mappedOutputMemory, sizeof( outputData ) );
-logicalDevice.device->unmapMemory( *outputBuffer.memory );
+logicalDevice->unmapMemory( *outputBuffer.memory );
 ```
 And now finally we can print the data to the console:
 ```cpp
