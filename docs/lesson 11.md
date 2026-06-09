@@ -109,4 +109,69 @@ int main()
     ...
 }
 ```
-Cool, we've got our command buffer ready.
+Cool, we've got our command buffer ready. But remember, in Vulkan there's a difference between recording the commands and actually executing them. So far the GPU didn't do anything with our pipeline or the data. We need to submit the command buffer to the queue we want to run it on. This is done by the following command:
+```cpp
+class Queue
+{
+    ...
+    void submit( const container_t< const SubmitInfo >& submitInfo, ... ) const;
+    ...
+};
+```
+Apparently we need an instance of the class `vk::Queue` that represents our compute queue. Where can we get that from? Well, since we configured our logical device to provide a queue with compute capabilities it might be worth looking at the interface of Device to see if we find something:
+```cpp
+class Device
+{
+    ...
+    Queue getQueue( uint32_t queueFamilyIndex, uint32_t queueIndex, ... ) const noexcept;
+    ...
+};
+```
+Et voilà - piece of cake. We also need to have a look at the `SubmitInfo` struct before we can actually submit our command buffer:
+```cpp
+struct SubmitInfo
+{
+    ...
+    SubmitInfo& setCommandBuffers( const container_t< const CommandBuffer >& commandBuffers_ );
+    SubmitInfo& setWaitSemaphores( const container_t< const Semaphore >& waitSemaphores_ );
+    SubmitInfo& setSignalSemaphores( const container_t< const Semaphore >& signalSemaphores_ );
+    SubmitInfo& setWaitDstStageMask( const container_t< PipelineStageFlags >& waitDstStageMask_ );
+    ...
+};
+```
+That looks a bit intimidating. The first parameter is clear enough, but what about the others? The good news is that we don't yet have to care about any of them:
+- Semaphores are synchronization objects, they exist in many programming languages to support multithreaded programming. In Vulkan they are used to synchronize the programs running on the GPU with the main application, or the programs running on different queues. Since we just want to run our program from start to end and then get the results, we don't need any synchronization at this point and we can ignore the semaphores for now. We'll come back to them later though.
+- `waitDstStageMask_` is related to the `waitSemaphores`, so we don't need it for now either.
+
+Which means we can actually now submit our program to the GPU:
+```cpp
+const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
+
+const auto submitInfo = vk::SubmitInfo{}
+    .setCommandBuffers( commandBuffer );
+queue.submit( submitInfo );
+```
+We did configure the device to only have one queue of the family, so in our case the `queueIndex` parameter needs to be set to 0.
+
+If you compile and run the program now, you will see the validation layer shouting at you, saying something like this:
+```
+> ... Attempt to destroy command pool with VkCommandBuffer 0x2147f035ea0[] which is in use. ...
+```
+... and more errors.
+
+The reason is that after we submit the command buffer, we are at the end of our `main` function and consequently the application terminates. When it does, the unique handles try to destroy their respective Vulkan objects. But the command buffer has just started to execute on the GPU. GPUs are fast, but not that fast. So we get an error because the command buffer we are destroying is still in use.
+
+Apart from the error, we also probably want to see the result of the calculation eventually. So we need to wait until the GPU has finished its work. We could do so by using the semaphores mentioned above. However, if we just want to wait for the GPU to finish our program, there's an easier way: we just ask the logical device to do that:
+```cpp
+class Device
+{
+    ...
+    void waitIdle( ... );
+    ...
+};
+```
+This function only returns when the logical device has finished all the work. You normally would not want to do that, as it essentially blocks the program flow and causes the  pipeline to run empty. In our case however there's nothing more to do except wait for the results, therefore it's okay. If you run the program now, all errors should be gone.
+
+Congratulations!
+
+You've just run your first Vulkan program on the GPU.

@@ -502,6 +502,14 @@ auto main() -> int
         commandBuffer.dispatch( 8, 1, 1 );
 
         commandBuffer.end();
+
+        const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
+
+        const auto submitInfo = vk::SubmitInfo{}
+            .setCommandBuffers( commandBuffer );
+        queue.submit( submitInfo );
+
+        logicalDevice.device->waitIdle();
     }
     catch( const std::exception& e )
     {
