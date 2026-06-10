@@ -97,6 +97,40 @@ const auto glfw = vcpp::GlfwInstance{};
 
 Don't forget to add the new files to `CMakeLists.txt`, then the project should build and run fine.
 
+## Creating the Window
+Now we'd like to have a window. Again GLFW uses the default C pattern by providing the functions `glfwCreateWindow` and `glfwDestroyWindow`. And again, we'd like to be able to package that into an RAII pattern. This time, because `glfwCreateWindow` returns a pointer to the created window, we can make use of C++' `unique_ptr`:
+```cpp
+using WindowPtr = std::unique_ptr< GLFWwindow, decltype( &glfwDestroyWindow ) >;
+```
+Since the call for creating the window pointer is not very concise, and since we'll probably want to set some properties for the window in the future, we'll put the window creation into a utility function again:
+```cpp
+auto createWindow( int width, int height, const std::string& title ) -> WindowPtr
+{
+    return WindowPtr{
+        glfwCreateWindow( width, height, title.c_str(), nullptr, nullptr ),
+        glfwDestroyWindow
+    };
+}
+```
+And now we can again create the window with one simple call:
+```cpp
+int main()
+{
+    try
+    {
+        const auto glfw = vcpp::GlfwInstance{};
+        const auto window = vcpp::createWindow( 800, 600, "Vulkan C++ Tutorial" );
+    ...
+```
+If you run the program now, you'll probably see a window flashing up for a moment and then vanishing again. That's perfectly correct - our program executes its `main` function and when it reaches the end of that it terminates and thus destroys the window. Obviously this is not how we want our application to behave though. We would like the application to run and the window to stay open until we close it explicitly. That's where the _'run loop'_ or _'event loop'_ comes into play. I'm not going to go into any details about that in this tutorial, it would blow up the scope way too much. Suffice it to say that the run loop is essentially just a normal loop which in every cycle checks for OS events (such as mouse events or key strokes) and processes them. If the user or the operating system tell the application to terminate, the loop is exited. For GLFW a very basic run loop looks like this:
+```cpp
+while ( !glfwWindowShouldClose( window.get() ) )
+{
+    glfwPollEvents();
+}
+```
+So in every iteration of the loop we let GLFW poll for new operating system events. We don't do anything explicit with them yet, but calling the poll function enables GLFW to do some magic under the hood (without that, the call to `glfwWindowShouldClose` wouldn't work correctly and we couldn't exit the application by closing the window). Compile and run the program now and you will see that we get a window that behaves exactly as we wanted it to.
+
 ---
 
 [^1]: Even if we were to go full screen from the start, it would still technically be a window

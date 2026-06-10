@@ -30,6 +30,7 @@ auto main() -> int
     try
     {
         const auto glfw = vcpp::GlfwInstance{};
+        const auto window = vcpp::createWindow( 800, 600, "Vulkan C++ Tutorial" );
 
         const auto instance = vcpp::createVulkanInstance();
         const auto physicalDevice = vcpp::selectPhysicalDevice( *instance );
@@ -37,6 +38,11 @@ auto main() -> int
             physicalDevice,
             vk::QueueFlagBits::eGraphics
         );
+
+        while ( !glfwWindowShouldClose( window.get() ) )
+        {
+            glfwPollEvents();
+        }
     }
     catch( const std::exception& e )
     {

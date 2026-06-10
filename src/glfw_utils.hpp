@@ -39,4 +39,8 @@ namespace vcpp
         GlfwInstance& operator= ( const GlfwInstance& ) = delete;
         GlfwInstance& operator= ( GlfwInstance&& ) = delete;
     };
+
+    using WindowPtr = std::unique_ptr< GLFWwindow, decltype( &glfwDestroyWindow ) >;
+
+    auto createWindow( int width, int height, const std::string& title ) -> WindowPtr;
 }

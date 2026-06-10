@@ -31,4 +31,13 @@ namespace vcpp
     }
 
     GlfwInstance::~GlfwInstance() { glfwTerminate(); }
+
+    auto createWindow( int width, int height, const std::string& title ) -> WindowPtr
+    {
+        glfwWindowHint( GLFW_CLIENT_API, GLFW_NO_API );
+        return WindowPtr{
+            glfwCreateWindow( width, height, title.c_str(), nullptr, nullptr ),
+            glfwDestroyWindow
+        };
+    }
 }
