@@ -17,32 +17,26 @@ License.
 
 ***************************************************************************************************/
 
-#include "devices.hpp"
-#include "glfw_utils.hpp"
-#include "memory.hpp"
-#include "pipelines.hpp"
+#pragma once
 
-#include <iostream>
+#include <vulkan/vulkan.hpp>
 
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
 
-auto main() -> int
+namespace vcpp
 {
-    try
+    class GlfwInstance
     {
-        const auto glfw = vcpp::GlfwInstance{};
+    public:
 
-        const auto instance = vcpp::createVulkanInstance();
-        const auto physicalDevice = vcpp::selectPhysicalDevice( *instance );
-        const auto logicalDevice = vcpp::createLogicalDevice(
-            physicalDevice,
-            vk::QueueFlagBits::eGraphics
-        );
-    }
-    catch( const std::exception& e )
-    {
-        std::cerr << "Exception thrown: " << e.what() << "\n";
-        return EXIT_FAILURE;
-    }
+        GlfwInstance();
+        ~GlfwInstance();
 
-    return EXIT_SUCCESS;
+        GlfwInstance( const GlfwInstance& ) = delete;
+        GlfwInstance( GlfwInstance&& ) = delete;
+
+        GlfwInstance& operator= ( const GlfwInstance& ) = delete;
+        GlfwInstance& operator= ( GlfwInstance&& ) = delete;
+    };
 }

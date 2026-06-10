@@ -17,32 +17,18 @@ License.
 
 ***************************************************************************************************/
 
-#include "devices.hpp"
 #include "glfw_utils.hpp"
-#include "memory.hpp"
-#include "pipelines.hpp"
 
-#include <iostream>
+#include <format>
 
 
-auto main() -> int
+namespace vcpp
 {
-    try
+    GlfwInstance::GlfwInstance()
     {
-        const auto glfw = vcpp::GlfwInstance{};
-
-        const auto instance = vcpp::createVulkanInstance();
-        const auto physicalDevice = vcpp::selectPhysicalDevice( *instance );
-        const auto logicalDevice = vcpp::createLogicalDevice(
-            physicalDevice,
-            vk::QueueFlagBits::eGraphics
-        );
-    }
-    catch( const std::exception& e )
-    {
-        std::cerr << "Exception thrown: " << e.what() << "\n";
-        return EXIT_FAILURE;
+        if ( auto result = glfwInit(); result != GLFW_TRUE )
+            throw std::runtime_error( std::format( "Could not init glfw. Error {}", result ) );
     }
 
-    return EXIT_SUCCESS;
+    GlfwInstance::~GlfwInstance() { glfwTerminate(); }
 }

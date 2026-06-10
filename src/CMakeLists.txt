@@ -6,6 +6,7 @@ find_package( Vulkan REQUIRED COMPONENTS glslc )
 add_executable( ${TARGET_NAME} main.cpp )
 
 target_sources( ${TARGET_NAME} PRIVATE devices.cpp  devices.hpp )
+target_sources( ${TARGET_NAME} PRIVATE glfw_utils.cpp  glfw_utils.hpp )
 target_sources( ${TARGET_NAME} PRIVATE memory.cpp  memory.hpp )
 target_sources( ${TARGET_NAME} PRIVATE pipelines.cpp  pipelines.hpp )
 
