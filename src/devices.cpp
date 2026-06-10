@@ -237,7 +237,10 @@ namespace vcpp
         return result;
     }
 
-    auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> LogicalDevice
+    auto createLogicalDevice(
+        const vk::PhysicalDevice& physicalDevice,
+        vk::QueueFlags requiredFlags
+    ) -> LogicalDevice
     {
         const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
         std::cout << "\nAvailable queue families:\n";
@@ -248,9 +251,10 @@ namespace vcpp
             ++familyIndex;
         }
 
+
         const auto queueFamilyIndex = findSuitableQueueFamily(
             queueFamilies,
-            vk::QueueFlagBits::eCompute | vk::QueueFlagBits::eTransfer
+            requiredFlags
         );
         std::cout << "\nSelected queue family index: " << queueFamilyIndex << "\n";
 

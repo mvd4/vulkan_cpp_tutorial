@@ -30,7 +30,10 @@ auto main() -> int
     {
         const auto instance = vcpp::createVulkanInstance();
         const auto physicalDevice = vcpp::selectPhysicalDevice( *instance );
-        const auto logicalDevice = vcpp::createLogicalDevice( physicalDevice );
+        const auto logicalDevice = vcpp::createLogicalDevice(
+            physicalDevice,
+            vk::QueueFlagBits::eGraphics
+        );
     }
     catch( const std::exception& e )
     {

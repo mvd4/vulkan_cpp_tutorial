@@ -58,5 +58,8 @@ namespace vcpp
         const std::vector< vk::ExtensionProperties >& availableExtensions
     ) -> std::vector< const char* >;
 
-    auto createLogicalDevice( const vk::PhysicalDevice& physicalDevice ) -> LogicalDevice;
+    auto createLogicalDevice(
+        const vk::PhysicalDevice& physicalDevice,
+        const vk::QueueFlags requiredFlags
+    ) -> LogicalDevice;
 }
