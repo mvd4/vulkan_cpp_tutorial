@@ -108,7 +108,7 @@ namespace vcpp
         std::cout << "\n";
     }
 
-    auto createVulkanInstance() -> vk::UniqueInstance
+    auto createVulkanInstance( const std::vector< std::string >& requiredExtensions ) -> vk::UniqueInstance
     {
         std::cout << "Vulkan SDK Version: " << getVulkanSDKVersion() << "\n";
 
@@ -133,7 +133,10 @@ namespace vcpp
 
         auto extensionsToEnable = std::vector< const char* >{
             VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-        };
+            VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME };
+
+        for ( const auto& e : requiredExtensions )
+            extensionsToEnable.push_back( e.c_str() );
 
         auto instanceCreateInfo = vk::InstanceCreateInfo{};
 
@@ -199,15 +202,24 @@ namespace vcpp
     }
 
     auto findSuitableQueueFamily(
-        const std::vector< vk::QueueFamilyProperties >& queueFamilies,
-        vk::QueueFlags requiredFlags
-    ) -> std::uint32_t
-    {
+        const vk::PhysicalDevice& physicalDevice,
+        vk::QueueFlags requiredFlags,
+        std::optional< const vk::SurfaceKHR > surface
+     ) -> std::uint32_t
+     {
+        const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
+
         std::uint32_t index = 0;
         for ( const auto& qf : queueFamilies )
         {
-            if ( ( qf.queueFlags & requiredFlags ) == requiredFlags )
+            if (
+                ( !surface.has_value() || physicalDevice.getSurfaceSupportKHR( index, *surface ) ) &&
+                ( qf.queueFlags & requiredFlags ) == requiredFlags
+            )
+            {
                 return index;
+            }
+
             ++index;
         }
         throw std::runtime_error( "No suitable queue family found" );
@@ -239,7 +251,8 @@ namespace vcpp
 
     auto createLogicalDevice(
         const vk::PhysicalDevice& physicalDevice,
-        vk::QueueFlags requiredFlags
+        vk::QueueFlags requiredFlags,
+        std::optional< const vk::SurfaceKHR > surface
     ) -> LogicalDevice
     {
         const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
@@ -253,8 +266,9 @@ namespace vcpp
 
 
         const auto queueFamilyIndex = findSuitableQueueFamily(
-            queueFamilies,
-            requiredFlags
+            physicalDevice,
+            requiredFlags,
+            surface
         );
         std::cout << "\nSelected queue family index: " << queueFamilyIndex << "\n";
 

@@ -22,6 +22,7 @@ License.
 #include <vulkan/vulkan.hpp>
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 
@@ -41,7 +42,7 @@ namespace vcpp
 
     auto printExtensionProperties( const std::vector< vk::ExtensionProperties >& extensions ) -> void;
 
-    auto createVulkanInstance() -> vk::UniqueInstance;
+    auto createVulkanInstance( const std::vector< std::string >& requiredExtensions = {} ) -> vk::UniqueInstance;
 
     auto printPhysicalDeviceProperties( const vk::PhysicalDevice& device ) -> void;
 
@@ -50,8 +51,9 @@ namespace vcpp
     auto printQueueFamilyProperties( const vk::QueueFamilyProperties& props, std::uint32_t index ) -> void;
 
     auto findSuitableQueueFamily(
-        const std::vector< vk::QueueFamilyProperties >& queueFamilies,
-        vk::QueueFlags requiredFlags
+        const vk::PhysicalDevice& physicalDevice,
+        vk::QueueFlags requiredFlags,
+        std::optional< const vk::SurfaceKHR > surface
     ) -> std::uint32_t;
 
     auto getRequiredDeviceExtensions(
@@ -60,6 +62,7 @@ namespace vcpp
 
     auto createLogicalDevice(
         const vk::PhysicalDevice& physicalDevice,
-        const vk::QueueFlags requiredFlags
+        const vk::QueueFlags requiredFlags,
+        std::optional< const vk::SurfaceKHR > surface
     ) -> LogicalDevice;
 }

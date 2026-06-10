@@ -131,8 +131,166 @@ while ( !glfwWindowShouldClose( window.get() ) )
 ```
 So in every iteration of the loop we let GLFW poll for new operating system events. We don't do anything explicit with them yet, but calling the poll function enables GLFW to do some magic under the hood (without that, the call to `glfwWindowShouldClose` wouldn't work correctly and we couldn't exit the application by closing the window). Compile and run the program now and you will see that we get a window that behaves exactly as we wanted it to.
 
+Alright, we have our window, now we'd like to draw to it. The trouble is: since the Vulkan core itself has no idea about windows, it also doesn't know how to render into one. So what do we do?
+
+## Window System Integration and Surfaces
+Well, the creators of Vulkan obviously knew that presentation (i.e. rendering to a screen or window) would be a very common requirement, so they took care that this problem be solved. The solution they came up with is to have the presentation support be implemented in instance extensions which are commonly referred to as the _'Windows System Integration (WSI)'_ extensions. There is a platform-independent _'VK_KHR_surface'_ extension which defines a  generic interface for a concept called 'surface'. You can think of a surface as a sort of a canvas that Vulkan can render to. The actual implementation of the surface is then provided by additional platform-specific extensions. So the whole thing works pretty much the same as abstract base classes and derived implementation classes in C++. Vulkan can use the abstract interface and the platform-specific implementation takes care of the actual presentation.
+
+If you want to verify that you have the surface extensions installed take a look at the instance extensions that our application prints out. You should find `VK_KHR_surface` among the names, along with a few other surface-related extensions.
+
+For us this means that if we want to render to our window we need to enable those extensions. To do that we could now simply add the respective extension names to our `extensionsToEnable` vector in `createVulkanInstance`. The problem with that however is that some of the required extensions are obviously platform specific. So we'd need to use preprocessor `#defines` or something similar to keep our application platform agnostic. Luckily there is an easier way because GLFW already has a function that tells us which extensions we need to enable on the current system:
+```cpp
+const char** glfwGetRequiredInstanceExtensions( uint32_t* count );
+```
+This one returns a C-array of C-Strings with the names of the required extensions. The size of that array is returned in the output parameter count. Since I want to keep all GLFW code in `glfw_utils`, I'll add a function to wrap that call[^4]:
+```cpp
+auto getRequiredExtensionsForGlfw() -> std::vector< std::string >
+{
+    std::vector< std::string > result;
+    std::uint32_t glfwExtensionCount = 0;
+    const char** glfwExtensions = glfwGetRequiredInstanceExtensions( &glfwExtensionCount );
+    for ( std::uint32_t i = 0; i < glfwExtensionCount; ++i )
+        result.push_back( glfwExtensions[i] );
+    return result;
+}
+```
+We could now call this function from inside `createVulkanInstance` directly and add the extensions to our vector of extensions to enable. That would create a tight coupling between `glfw_utils` and `devices` though, therefore I'll go with a different approach and change `createVulkanInstance` as follows:
+```cpp
+auto createVulkanInstance( const std::vector< std::string >& requiredExtensions ) -> vk::UniqueInstance
+{
+    ...
+    auto extensionsToEnable = std::vector< const char* >{
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME
+    };
+
+    for ( const auto& e : requiredExtensions )
+        extensionsToEnable.push_back( e.c_str() );
+    ...
+}
+```
+The call in main then changes to:
+```cpp
+const auto instance = vcpp::createVulkanInstance( vcpp::getRequiredExtensionsForGlfw() );
+```
+
+Now that we have the extensions enabled, we can actually create the surface. Like with the necessary extensions, GLFW abstracts away all the platform specifics here, so that we only have to use this function:
+```cpp
+VkResult glfwCreateWindowSurface( VkInstance instance, GLFWwindow* window, const VkAllocationCallbacks* allocator, VkSurfaceKHR* surface );
+```
+We can ignore the allocator callback, the rest of the parameters should be straightforward. It's of course a C function again, so we'd have to manually manage the `surface` pointer which we don't really want to do. Luckily the creators of the C++ wrapper seemed to have thought the same, so they created a `vk::UniqueSurfaceKHR` class. We don't get away from using the C function (the Vulkan c++ wrapper only seems to have C++ versions of the platform specific functions), but at least we can then wrap the returned pointer in a c++ class:
+```cpp
+auto createSurface(
+    const vk::Instance& instance,
+    GLFWwindow& window
+) -> vk::UniqueSurfaceKHR
+{
+    VkSurfaceKHR surface;
+    if (
+        const auto result = glfwCreateWindowSurface( instance, &window, nullptr, &surface );
+        result != VK_SUCCESS
+    )
+    {
+        throw std::runtime_error( std::format( "failed to create window surface. Error: {}", static_cast< int >( result ) ) );
+    }
+
+    return vk::UniqueSurfaceKHR{ vk::SurfaceKHR( surface ), instance };
+}
+```
+We need to create the surface before the logical device, because the selection of the appropriate physical device and queue may actually depend on the surface. We therefore call our new function right after creating the instance:
+```cpp
+int main()
+{
+    try
+    {
+        const auto glfw = vcpp::GlfwInstance{};
+        const auto window = vcpp::createWindow( 800, 600, "Vulkan C++ Tutorial" );
+
+        const auto instance = vcpp::createVulkanInstance( vcpp::getRequiredExtensionsForGlfw() );
+        const auto surface = vcpp::createSurface( *instance, *window );
+        ...
+```
+And in this case we cannot simply assume that the graphics queue will support presenting to our surface (although it probably will), because without calling the appropriate function
+```cpp
+class PhysicalDevice
+{
+    ...
+    Bool32 getSurfaceSupportKHR( uint32_t queueFamilyIndex, SurfaceKHR surface, ... );
+    ...
+}
+```
+... we'll later be unable to connect our graphics pipeline to the surface. Therefore let's modify our queue selection function[^5]:
+```cpp
+auto findSuitableQueueFamily(
+    const vk::PhysicalDevice& physicalDevice,
+    vk::QueueFlags requiredFlags,
+    std::optional< const vk::SurfaceKHR > surface
+) -> std::uint32_t
+{
+    const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
+
+    std::uint32_t index = 0;
+    for ( auto const& q : queueFamilies )
+    {
+        if (
+            ( !surface.has_value() || physicalDevice.getSurfaceSupportKHR( index, *surface ) ) &&
+            ( q.queueFlags & requiredFlags ) == requiredFlags
+        )
+        {
+            return index;
+        }
+
+        ++index;
+    }
+    throw std::runtime_error( "No suitable queue family found" );
+}
+```
+We use an optional to pass in the surface because our queue selection should also continue to work if we want to create e.g a compute queue. We then filter out all queues that don't support presentation to our surface. Obviously we also need to modify our logical device creation:
+```cpp
+auto createLogicalDevice(
+    const vk::PhysicalDevice& physicalDevice,
+    const vk::QueueFlags requiredFlags,
+    std::optional< const vk::SurfaceKHR > surface
+) -> LogicalDevice
+{
+    ...
+    const auto queueFamilyIndex = findSuitableQueueFamily(
+        physicalDevice,
+        requiredFlags,
+        surface
+    );
+    ...
+}
+```
+... and the call in `main`:
+```cpp
+const auto logicalDevice = vcpp::createLogicalDevice(
+    physicalDevice,
+    vk::QueueFlagBits::eGraphics,
+    *surface
+);
+```
+
+However, if you run the program now you will get an exception because the surface creation failed. Looking up the error code that is returned from the GLFW function yields the constant `VK_ERROR_NATIVE_WINDOW_IN_USE_KHR`. How can that be? I mean we just created the window and definitely didn't use it yet.
+
+What bites us here is again the fact that GLFW was originally written for OpenGL and only extended to use Vulkan later. When creating the window, GLFW already also created an OpenGL context for that window under the hood. That is not compatible with a Vulkan surface, hence our attempt to create one fails. Fortunately the solution for this is easy, we just need to tell GLFW to not create that OpenGL context. To do that we have to call the function `glfwWindowHint` with the appropriate parameters:
+
+```cpp
+auto createWindow( int width, int height, const std::string& title ) -> WindowPtr
+{
+    glfwWindowHint( GLFW_CLIENT_API, GLFW_NO_API );
+    ...
+}
+```
+
+And with that everything should work again.
+
+That's it for today. We've covered quite a bit of ground and are now well prepared to start looking into how to setup a graphics pipeline in Vulkan. That's what we'll do next time.
+
 ---
 
 [^1]: Even if we were to go full screen from the start, it would still technically be a window
 [^2]: In fact, you can absolutely use Vulkan's graphics capabilities without ever rendering anything to a window / screen, e.g. if you just want to render stuff on a server and then save it to a file without displaying it anywhere.
 [^3]: A note here: in many tutorials you will see people wrap GLFW initialization, window-creation, application run-loop and more in one big class. I am personally not a fan of this approach as this quickly leads to a loss of flexibility and clarity and has negative effects on modularity and testability of the code. So I keep my classes as small as possible until I see a clear benefit in making them larger. As far as I can tell this also corresponds to a general move to more functional patterns in C++ and other languages.
+[^4]: A `vector< const char* >` would have done as well here as the pointers point to static strings within GLFW. But it's never a good idea to rely on implementation details, especially not in code that you don't control. Therefore I'll rather accept the small overhead of creating strings here - the function is probably not going to be called more than once anyway.
+[^5]: Yes, we now call `getQueueFamilyProperties` twice. Nevertheless I think that's the cleanest option because actually the log output probably shouldn't be part of a production version of `createLogicalDevice`. So we wouldn't need the queue properties in there anymore. It also seems weird to pass the physical device and also a property vector that can directly be obtained by the physical device to the same function as parameters.

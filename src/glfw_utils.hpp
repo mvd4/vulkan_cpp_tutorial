@@ -43,4 +43,11 @@ namespace vcpp
     using WindowPtr = std::unique_ptr< GLFWwindow, decltype( &glfwDestroyWindow ) >;
 
     auto createWindow( int width, int height, const std::string& title ) -> WindowPtr;
+
+    auto getRequiredExtensionsForGlfw() -> std::vector< std::string >;
+
+    auto createSurface(
+        const vk::Instance& instance,
+        GLFWwindow& window
+    ) -> vk::UniqueSurfaceKHR;
 }

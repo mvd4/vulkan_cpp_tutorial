@@ -40,4 +40,31 @@ namespace vcpp
             glfwDestroyWindow
         };
     }
+
+    auto getRequiredExtensionsForGlfw() -> std::vector< std::string >
+    {
+        std::vector< std::string > result;
+        std::uint32_t glfwExtensionCount = 0;
+        const char** glfwExtensions = glfwGetRequiredInstanceExtensions( &glfwExtensionCount );
+        for ( std::uint32_t i = 0; i < glfwExtensionCount; ++i )
+            result.push_back( glfwExtensions[i] );
+        return result;
+    }
+
+    auto createSurface(
+        const vk::Instance& instance,
+        GLFWwindow& window
+    ) -> vk::UniqueSurfaceKHR
+    {
+        VkSurfaceKHR surface;
+        if (
+            const auto result = glfwCreateWindowSurface( instance, &window, nullptr, &surface );
+            result != VK_SUCCESS
+        )
+        {
+            throw std::runtime_error( std::format( "failed to create window surface. Error: {}", static_cast< int >( result ) ) );
+        }
+
+        return vk::UniqueSurfaceKHR{ vk::SurfaceKHR( surface ), instance };
+    }
 }

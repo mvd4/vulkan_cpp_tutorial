@@ -32,11 +32,14 @@ auto main() -> int
         const auto glfw = vcpp::GlfwInstance{};
         const auto window = vcpp::createWindow( 800, 600, "Vulkan C++ Tutorial" );
 
-        const auto instance = vcpp::createVulkanInstance();
+        const auto instance = vcpp::createVulkanInstance( vcpp::getRequiredExtensionsForGlfw() );
+        const auto surface = vcpp::createSurface( *instance, *window );
+
         const auto physicalDevice = vcpp::selectPhysicalDevice( *instance );
         const auto logicalDevice = vcpp::createLogicalDevice(
             physicalDevice,
-            vk::QueueFlagBits::eGraphics
+            vk::QueueFlagBits::eGraphics,
+            *surface
         );
 
         while ( !glfwWindowShouldClose( window.get() ) )
