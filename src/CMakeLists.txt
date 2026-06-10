@@ -1,5 +1,6 @@
 set( TARGET_NAME vulkan-cpp-tutorial )
 
+find_package( glfw3 CONFIG REQUIRED )
 find_package( Vulkan REQUIRED COMPONENTS glslc )
 
 add_executable( ${TARGET_NAME} main.cpp )
@@ -14,7 +15,7 @@ set_target_properties( ${TARGET_NAME} PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:${TARGET_NAME}>"
 )
 
-target_link_libraries( ${TARGET_NAME} PRIVATE Vulkan::Vulkan )
+target_link_libraries( ${TARGET_NAME} PRIVATE glfw Vulkan::Vulkan )
 
 
 # shaders
