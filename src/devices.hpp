@@ -53,7 +53,7 @@ namespace vcpp
     auto findSuitableQueueFamily(
         const vk::PhysicalDevice& physicalDevice,
         vk::QueueFlags requiredFlags,
-        std::optional< const vk::SurfaceKHR > surface
+        std::optional< vk::SurfaceKHR > surface
     ) -> std::uint32_t;
 
     auto getRequiredDeviceExtensions(
@@ -62,7 +62,7 @@ namespace vcpp
 
     auto createLogicalDevice(
         const vk::PhysicalDevice& physicalDevice,
-        const vk::QueueFlags requiredFlags,
-        std::optional< const vk::SurfaceKHR > surface
+        vk::QueueFlags requiredFlags,
+        std::optional< vk::SurfaceKHR > surface
     ) -> LogicalDevice;
 }

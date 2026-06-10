@@ -204,7 +204,7 @@ namespace vcpp
     auto findSuitableQueueFamily(
         const vk::PhysicalDevice& physicalDevice,
         vk::QueueFlags requiredFlags,
-        std::optional< const vk::SurfaceKHR > surface
+        std::optional< vk::SurfaceKHR > surface
      ) -> std::uint32_t
      {
         const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
@@ -252,7 +252,7 @@ namespace vcpp
     auto createLogicalDevice(
         const vk::PhysicalDevice& physicalDevice,
         vk::QueueFlags requiredFlags,
-        std::optional< const vk::SurfaceKHR > surface
+        std::optional< vk::SurfaceKHR > surface
     ) -> LogicalDevice
     {
         const auto queueFamilies = physicalDevice.getQueueFamilyProperties();

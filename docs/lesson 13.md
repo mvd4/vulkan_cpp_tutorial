@@ -6,7 +6,7 @@ Our logical device creation function is still hardwired to create a compute queu
 ```cpp
 auto createLogicalDevice(
     const vk::PhysicalDevice& physicalDevice,
-    const vk::QueueFlags requiredFlags
+    vk::QueueFlags requiredFlags
 ) -> LogicalDevice
 {
     ...
@@ -19,7 +19,7 @@ auto createLogicalDevice(
 ```
 With this change in place we can now create our logical device like this:
 ```cpp
-int main()
+auto main() -> int
 {
     ...
     const auto logicalDevice = vcpp::createLogicalDevice(
@@ -114,7 +114,7 @@ auto createWindow( int width, int height, const std::string& title ) -> WindowPt
 ```
 And now we can again create the window with one simple call:
 ```cpp
-int main()
+auto main() -> int
 {
     try
     {
@@ -134,7 +134,7 @@ So in every iteration of the loop we let GLFW poll for new operating system even
 Alright, we have our window, now we'd like to draw to it. The trouble is: since the Vulkan core itself has no idea about windows, it also doesn't know how to render into one. So what do we do?
 
 ## Window System Integration and Surfaces
-Well, the creators of Vulkan obviously knew that presentation (i.e. rendering to a screen or window) would be a very common requirement, so they took care that this problem be solved. The solution they came up with is to have the presentation support be implemented in instance extensions which are commonly referred to as the _'Windows System Integration (WSI)'_ extensions. There is a platform-independent _'VK_KHR_surface'_ extension which defines a  generic interface for a concept called 'surface'. You can think of a surface as a sort of a canvas that Vulkan can render to. The actual implementation of the surface is then provided by additional platform-specific extensions. So the whole thing works pretty much the same as abstract base classes and derived implementation classes in C++. Vulkan can use the abstract interface and the platform-specific implementation takes care of the actual presentation.
+Well, the creators of Vulkan obviously knew that presentation (i.e. rendering to a screen or window) would be a very common requirement, so they took care that this problem be solved. The solution they came up with is to have the presentation support be implemented in instance extensions which are commonly referred to as the _'Window System Integration (WSI)'_ extensions. There is a platform-independent _'VK_KHR_surface'_ extension which defines a generic interface for a concept called 'surface'. You can think of a surface as a sort of a canvas that Vulkan can render to. The actual implementation of the surface is then provided by additional platform-specific extensions. So the whole thing works pretty much the same as abstract base classes and derived implementation classes in C++. Vulkan can use the abstract interface and the platform-specific implementation takes care of the actual presentation.
 
 If you want to verify that you have the surface extensions installed take a look at the instance extensions that our application prints out. You should find `VK_KHR_surface` among the names, along with a few other surface-related extensions.
 
@@ -197,9 +197,9 @@ auto createSurface(
     return vk::UniqueSurfaceKHR{ vk::SurfaceKHR( surface ), instance };
 }
 ```
-We need to create the surface before the logical device, because the selection of the appropriate physical device and queue may actually depend on the surface. We therefore call our new function right after creating the instance:
+We need to create the surface before the logical device, because the selection of the appropriate queue now depends on the surface. We therefore call our new function right after creating the instance:
 ```cpp
-int main()
+auto main() -> int
 {
     try
     {
@@ -210,7 +210,7 @@ int main()
         const auto surface = vcpp::createSurface( *instance, *window );
         ...
 ```
-And in this case we cannot simply assume that the graphics queue will support presenting to our surface (although it probably will), because without calling the appropriate function
+There is no guarantee that the graphics queue will support presenting to our surface (although in reality it probably will). So in order to make sure that we'll later be able to connect our graphics pipeline to the surface we should verify this by using the appropriate function.
 ```cpp
 class PhysicalDevice
 {
@@ -219,12 +219,12 @@ class PhysicalDevice
     ...
 }
 ```
-... we'll later be unable to connect our graphics pipeline to the surface. Therefore let's modify our queue selection function[^5]:
+Therefore let's modify our queue selection function[^5]:
 ```cpp
 auto findSuitableQueueFamily(
     const vk::PhysicalDevice& physicalDevice,
     vk::QueueFlags requiredFlags,
-    std::optional< const vk::SurfaceKHR > surface
+    std::optional< vk::SurfaceKHR > surface
 ) -> std::uint32_t
 {
     const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
@@ -245,12 +245,12 @@ auto findSuitableQueueFamily(
     throw std::runtime_error( "No suitable queue family found" );
 }
 ```
-We use an optional to pass in the surface because our queue selection should also continue to work if we want to create e.g a compute queue. We then filter out all queues that don't support presentation to our surface. Obviously we also need to modify our logical device creation:
+We use an optional to pass in the surface because our queue selection should also continue to work if we want to create e.g a compute queue. We then filter out all queues that don't support presentation to our surface[^6]. Obviously we also need to modify our logical device creation:
 ```cpp
 auto createLogicalDevice(
     const vk::PhysicalDevice& physicalDevice,
-    const vk::QueueFlags requiredFlags,
-    std::optional< const vk::SurfaceKHR > surface
+    vk::QueueFlags requiredFlags,
+    std::optional< vk::SurfaceKHR > surface
 ) -> LogicalDevice
 {
     ...
@@ -294,3 +294,4 @@ That's it for today. We've covered quite a bit of ground and are now well prepar
 [^3]: A note here: in many tutorials you will see people wrap GLFW initialization, window-creation, application run-loop and more in one big class. I am personally not a fan of this approach as this quickly leads to a loss of flexibility and clarity and has negative effects on modularity and testability of the code. So I keep my classes as small as possible until I see a clear benefit in making them larger. As far as I can tell this also corresponds to a general move to more functional patterns in C++ and other languages.
 [^4]: A `vector< const char* >` would have done as well here as the pointers point to static strings within GLFW. But it's never a good idea to rely on implementation details, especially not in code that you don't control. Therefore I'll rather accept the small overhead of creating strings here - the function is probably not going to be called more than once anyway.
 [^5]: Yes, we now call `getQueueFamilyProperties` twice. Nevertheless I think that's the cleanest option because actually the log output probably shouldn't be part of a production version of `createLogicalDevice`. So we wouldn't need the queue properties in there anymore. It also seems weird to pass the physical device and also a property vector that can directly be obtained by the physical device to the same function as parameters.
+[^6]: Here we look for a single queue family that supports both our required operations (graphics) and presentation to the surface. On virtually all real-world hardware such a family exists, so this keeps things simple. Be aware though that the Vulkan specification does not guarantee it — in principle a device could expose graphics and presentation only in *separate* queue families, in which case we would have to select (and later create) two distinct queues. We'll cross that bridge if we ever need to.
