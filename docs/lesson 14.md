@@ -18,7 +18,7 @@ Next in line is the _Vertex Shader Stage_. This is one of the programmable stage
 
 _Tessellation and Geometry Stages_ are also programmable, but they are optional and we won't be using them for now. I therefore won't go into details here. Suffice it to say that they can be used to let the GPU create additional vertices to add geometry to the scene and improve the level of detail.
 
-The _Primitive Assembly_ is a fixed stage that takes the processed (and - if we have tessellation and/or geometry shaders - generated ) vertices and groups them into primitives by using the information from the input assembly stage. Without this step, the next stage would not be able to do its job as it would still only see individual vertices and couldn't process primitives as a whole. The primitive assembly stage is also the one that applies the viewport transformation, i.e. it transforms vertices from normalized 3D device coordinates into 2D image coordinates.
+The _Primitive Assembly_ is a fixed stage that takes the processed (and - if we have tessellation and/or geometry shaders - generated ) vertices and groups them into primitives by using the information from the input assembly stage. Without this step, the next stage would not be able to do its job as it would still only see individual vertices and couldn't process primitives as a whole. The primitive assembly stage is also the one that applies the viewport transformation, i.e. it transforms vertices from normalized 3D device coordinates into 2D image coordinates.[^5]
 
 _Rasterization_ is another fixed stage whose main job it is to transform the logical representation of a primitive (up to now those are still defined by their vertices) into a collection of so-called fragments that are interpolated between the vertices and make up the actual visual shape on your screen[^2]. The rasterization stage is also responsible for operations like back-face culling and depth clamping (more on those later), and to determine whether the geometry ultimately is drawn as points, lines or filled shapes.
 
@@ -93,7 +93,7 @@ auto createGraphicsPipeline( const vk::Device& logicalDevice ) -> vk::UniquePipe
 ```
 And to check whether that function is actually working, let's already call it from `main`:
 ```cpp
-int main()
+auto main() -> int
 {
     try
     {
@@ -120,9 +120,10 @@ If you compile and run this now, you'll get a lot of validation errors and an ex
 ---
 
 [^1]: In reality there usually is also other input like vertex indices, global variables (aka uniforms) etc. They are not relevant for understanding the basic principles of the pipeline though, therefore I'm ignoring them at this point.
-[^2]: A fragment is basically a position in the 2D space of the framebuffer with an associated a depth value, plus potentially some interpolated data from previous stages. For simplicity you can think of the fragments as the pixels of the image that are finally drawn on the screen, although this is not really accurate as there is not always a 1:1 equivalence between a fragment and a pixel (e.g. in the presence of multisampling).
+[^2]: A fragment is basically a position in the 2D space of the framebuffer with an associated depth value, plus potentially some interpolated data from previous stages. For simplicity you can think of the fragments as the pixels of the image that are finally drawn on the screen, although this is not really accurate as there is not always a 1:1 equivalence between a fragment and a pixel (e.g. in the presence of multisampling).
 [^3]: It's good to keep in mind that the fragment shader, since it is run a lot more often than the other shaders, has a significant impact on the overall processing time of the pipeline.
 [^4]: This makes sense e.g. when you're only interested in the depth value of a fragment because you're doing shadow mapping or a related technique
+[^5]: This is a slight simplification: in the Vulkan specification the viewport transformation is part of the dedicated _vertex post-processing_ step that happens between primitive assembly and rasterization. Grouping it with primitive assembly keeps our mental model of the pipeline simpler without changing anything in practice.
 
 Further reading:
-- [Fragment Storm: Overview of the Graphics Pipeline](http://www.fragmentstorm.com/overview-of-the-graphics-pipeline)
+- [Fragment Storm: Overview of the Graphics Pipeline](https://www.fragmentstorm.com/overview-of-the-graphics-pipeline)
