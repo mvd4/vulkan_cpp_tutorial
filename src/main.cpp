@@ -42,6 +42,8 @@ auto main() -> int
             *surface
         );
 
+        const auto pipeline = vcpp::createGraphicsPipeline( logicalDevice );
+
         while ( !glfwWindowShouldClose( window.get() ) )
         {
             glfwPollEvents();

@@ -28,9 +28,101 @@ And finally the _Color Blending Stage_. This is where the color of each new frag
 
 The output data of the graphics pipeline is stored in a so-called framebuffer. In the simplest case the output is just one rendered image, but the framebuffer can hold multiple of those, e.g. for also storing the depth values for each fragment. This is why the fragment shader stage and the color blending stage have to interact with the framebuffer instead of just writing to it.
 
+## Creating the graphics pipeline
+
+Okay, so much for the theory. Let's look at how we can create a graphics pipeline in practice. We've actually already had a brief look at the needed function back in lesson 8:
+```cpp
+class Device
+{
+    ...
+    // return values are actually ResultValue< UniquePipeline >, see lesson 2
+    UniquePipeline createGraphicsPipelineUnique( PipelineCache pipelineCache, const GraphicsPipelineCreateInfo& createInfo, ... );
+    ...
+};
+```
+So the only difference compared to creating a compute pipeline is that this time we need a `GraphicsPipelineCreateInfo`. So let's have a look at that one:
+```cpp
+struct GraphicsPipelineCreateInfo
+{
+    ...
+    GraphicsPipelineCreateInfo& setFlags( PipelineCreateFlags flags_ );
+    GraphicsPipelineCreateInfo& setStages( const container_t< const PipelineShaderStageCreateInfo >& stages_ );
+    GraphicsPipelineCreateInfo& setPVertexInputState( const PipelineVertexInputStateCreateInfo* pVertexInputState_ );
+    GraphicsPipelineCreateInfo& setPInputAssemblyState( const PipelineInputAssemblyStateCreateInfo* pInputAssemblyState_ );
+    GraphicsPipelineCreateInfo& setPTessellationState( const PipelineTessellationStateCreateInfo* pTessellationState_ );
+    GraphicsPipelineCreateInfo& setPViewportState( const PipelineViewportStateCreateInfo* pViewportState_ );
+    GraphicsPipelineCreateInfo& setPRasterizationState( const PipelineRasterizationStateCreateInfo* pRasterizationState_ );
+    GraphicsPipelineCreateInfo& setPMultisampleState( const PipelineMultisampleStateCreateInfo* pMultisampleState_ );
+    GraphicsPipelineCreateInfo& setPDepthStencilState( const PipelineDepthStencilStateCreateInfo* pDepthStencilState_ );
+    GraphicsPipelineCreateInfo& setPColorBlendState( const PipelineColorBlendStateCreateInfo* pColorBlendState_ );
+    GraphicsPipelineCreateInfo& setPDynamicState( const PipelineDynamicStateCreateInfo* pDynamicState_ );
+    GraphicsPipelineCreateInfo& setLayout( PipelineLayout layout_ );
+    GraphicsPipelineCreateInfo& setRenderPass( RenderPass renderPass_ );
+    GraphicsPipelineCreateInfo& setSubpass( uint32_t subpass_ );
+    GraphicsPipelineCreateInfo& setBasePipelineHandle( Pipeline basePipelineHandle_ );
+    GraphicsPipelineCreateInfo& setBasePipelineIndex( int32_t basePipelineIndex_ );
+    ...
+};
+```
+At first sight that seems quite a lot of stuff to configure. But compare this interface to the logical structure I described above - a lot of this should already bear some meaning for you by now. Anyway, let's go through the functions one by one quickly (we'll cover the relevant ones in more detail later):
+- there are several `PipelineCreateFlags` that we could set (quite many actually since Vulkan version 1.1), but since none of them is relevant for us at this point we once more leave the flags alone
+- this time we can set multiple `stages_`, not just one as for the compute pipeline. And that makes sense, as we just learned that there are the vertex, geometry, tessellation and fragment shader stages that we can define for a graphics pipeline.
+- `setPVertexInputState`, as its name suggests, describes the vertex input to the pipeline, i.e. where to find and how to interpret the vertex data. I didn't list this as a separate stage in the overview above because to my knowledge there is no actual functionality associated with the vertex input state. It's really just a bit of information that we need to pass to the pipeline.
+- `pInputAssemblyState_` unsurprisingly determines the behavior of the input assembly stage
+- since we won't use tessellation, `setPTessellationState` is not of any interest for us right now
+- `pViewportState_` specifies the configurable part of the primitive assembly stage. As described above, this is controlling how 3D world coordinates are converted into 2D framebuffer coordinates.
+- `pRasterizationState_` is hopefully self-explanatory again
+- multisampling is a technique to improve the visual quality, especially of edges, by computing multiple fragments per screen pixel and then outputting an average. We won't be using this feature until later in this series, however, Vulkan requires us to define and set a `pMultisampleState_`.
+- we also won't need `pDepthStencilState_` for now as we're only going to draw a single triangle initially and therefore don't have to deal with depth testing yet
+- `pColorBlendState_` is important again but should be conceptually clear as well
+- in general pipelines in Vulkan are fixed, which means that you cannot change them after creation. That has a lot of advantages for the drivers ability to optimize the pipeline performance. But the flip-side of that is that you have to re-create the pipeline every time parts of the configuration change. That would be very wasteful in a scenario where such changes happen frequently. Therefore Vulkan allows you to mark parts of the pipeline as dynamic upfront, so that you can apply changes without having to recreate the whole pipeline. Our pipeline will not be changing, so we will ignore `setPDynamicState`
+- You may remember that we had to create a `PipelineLayout` for our compute pipeline, and that this was used to set up the descriptors. We will start out without specifying any data input to the pipeline, so we can just use an empty layout for now.
+- the `RenderPass` is difficult to explain in a few words. We'll look at this one in more depth when we actually get to creating one. For now suffice it to say that a render pass describes the target structures the pipeline renders to
+- and finally there's the two functions relating to the base pipeline. Those become relevant when you derive similar pipelines from a common base pipeline in order to be able to switch among them rapidly. We won't be using this feature either.
+
+Alright, we now have an overview on what we need to do to create a render pipeline. Let's finish today's lesson by preparing the corresponding function:
+```cpp
+auto createGraphicsPipeline( const vk::Device& logicalDevice ) -> vk::UniquePipeline
+{
+    const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{};
+
+    return logicalDevice.createGraphicsPipelineUnique(
+        vk::PipelineCache{},
+        pipelineCreateInfo ).value;
+}
+```
+And to check whether that function is actually working, let's already call it from `main`:
+```cpp
+int main()
+{
+    try
+    {
+        ...
+
+        const auto pipeline = vcpp::createGraphicsPipeline( logicalDevice );
+
+        while ( !glfwWindowShouldClose( window.get() ) )
+        {
+            glfwPollEvents();
+        }
+    }
+    catch( const std::exception& e )
+    {
+        std::cerr << "Exception thrown: " << e.what() << "\n";
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
+}
+```
+
+If you compile and run this now, you'll get a lot of validation errors and an exception. This is okay for now because our `pipelineCreateInfo` doesn't really contain any information yet and so Vulkan doesn't know what to do. Starting next time we'll fill the create info with the proper data.
+
 ---
 
 [^1]: In reality there usually is also other input like vertex indices, global variables (aka uniforms) etc. They are not relevant for understanding the basic principles of the pipeline though, therefore I'm ignoring them at this point.
 [^2]: A fragment is basically a position in the 2D space of the framebuffer with an associated a depth value, plus potentially some interpolated data from previous stages. For simplicity you can think of the fragments as the pixels of the image that are finally drawn on the screen, although this is not really accurate as there is not always a 1:1 equivalence between a fragment and a pixel (e.g. in the presence of multisampling).
 [^3]: It's good to keep in mind that the fragment shader, since it is run a lot more often than the other shaders, has a significant impact on the overall processing time of the pipeline.
 [^4]: This makes sense e.g. when you're only interested in the depth value of a fragment because you're doing shadow mapping or a related technique
+
+Further reading:
+- [Fragment Storm: Overview of the Graphics Pipeline](http://www.fragmentstorm.com/overview-of-the-graphics-pipeline)
