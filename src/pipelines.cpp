@@ -113,9 +113,33 @@ namespace vcpp
         return logicalDevice.createDescriptorPoolUnique( poolCreateInfo );
     }
 
-    auto createRenderPass( const vk::Device& logicalDevice ) -> vk::UniqueRenderPass
+    auto createRenderPass(
+        const vk::Device& logicalDevice,
+        vk::Format colorFormat
+    ) -> vk::UniqueRenderPass
     {
-        const auto renderPassCreateInfo = vk::RenderPassCreateInfo{};
+        const auto colorAttachment = vk::AttachmentDescription{}
+            .setFormat( colorFormat )
+            .setSamples( vk::SampleCountFlagBits::e1 )
+            .setLoadOp( vk::AttachmentLoadOp::eClear )
+            .setStoreOp( vk::AttachmentStoreOp::eStore )
+            .setStencilLoadOp( vk::AttachmentLoadOp::eDontCare )
+            .setStencilStoreOp( vk::AttachmentStoreOp::eDontCare )
+            .setInitialLayout( vk::ImageLayout::eUndefined )
+            .setFinalLayout( vk::ImageLayout::ePresentSrcKHR );
+
+        const auto colorAttachmentRef = vk::AttachmentReference{}
+            .setAttachment( 0 )
+            .setLayout( vk::ImageLayout::eColorAttachmentOptimal );
+
+        const auto subpass = vk::SubpassDescription{}
+            .setPipelineBindPoint( vk::PipelineBindPoint::eGraphics )
+            .setColorAttachments( colorAttachmentRef );
+
+        const auto renderPassCreateInfo = vk::RenderPassCreateInfo{}
+            .setAttachments( colorAttachment )
+            .setSubpasses( subpass );
+
         return logicalDevice.createRenderPassUnique( renderPassCreateInfo );
     }
 

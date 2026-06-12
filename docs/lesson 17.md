@@ -116,3 +116,134 @@ int main()
 }
 ```
 Running this version brings us down to two validation errors (and the exception) - we're getting closer!
+
+## Attachments
+So let's actually configure our render pass and see what that gets us. The first thing we need to set are the attachments. We want to draw a simple triangle on screen for now, which means that we only need the color output of the pipeline (and not depth values or anything else). So we should probably create a color attachment and pass that to the configuration. All attachments are created with the same structure:
+```cpp
+struct AttachmentDescription
+{
+    ...
+    AttachmentDescription& setFlags( AttachmentDescriptionFlags flags_ );
+    AttachmentDescription& setFormat( Format format_ );
+    AttachmentDescription& setSamples( SampleCountFlagBits samples_ );
+    AttachmentDescription& setLoadOp( AttachmentLoadOp loadOp_ );
+    AttachmentDescription& setStoreOp( AttachmentStoreOp storeOp_ );
+    AttachmentDescription& setStencilLoadOp( AttachmentLoadOp stencilLoadOp_ );
+    AttachmentDescription& setStencilStoreOp( AttachmentStoreOp stencilStoreOp_ );
+    AttachmentDescription& setInitialLayout( ImageLayout initialLayout_ );
+    AttachmentDescription& setFinalLayout( ImageLayout finalLayout_ );
+    ...
+};
+```
+- there is one possible flag defined, but that is only relevant for advanced use cases where multiple attachments share the same physical memory. We therefore once more ignore the `flags_` parameter
+- the `format_` specifies the color format of the attachment, i.e. the number of bits per color channel, how they are to be interpreted (e.g. signed vs unsigned) and the order of the channels.
+- the `samples_` parameter defines the number of multisample fragments per pixel. Since we're not using multisampling for now, we'll set it to `SampleCountFlagBits::e1`
+- `loadOp_` tells Vulkan what to do when loading the attachment at the beginning of the render cycle. The following options are available:
+  - `AttachmentLoadOp::eLoad`: load the attachment and don't touch the content. This is useful if you want to modify an already existing image by rendering into it
+  - `AttachmentLoadOp::eClear`: set the whole attachment to the clear color initially. The clear color can be set at the beginning of the render cycle. Essentially you set a background color for your image with this option.
+  - `AttachmentLoadOp::eDontCare`: allow Vulkan to do whatever it wants with the contents of the attachment. If you're sure that you'll render every single fragment in the image anyway, this is probably the most efficient option.
+- similarly, `storeOp_` tells Vulkan what to do with the attachment at the end of the render cycle. The available options here are:
+  - `AttachmentStoreOp::eStore`: this is the option you want to set if you intend to use the image after the render pass has ended, e.g. for displaying it on the screen.
+  - `AttachmentStoreOp::eDontCare`: this tells Vulkan that you don't need the attachment after the end of the render cycle, so it can do with it whatever it wants. This usually is the case for the depth values or for any intermediate images that are only needed during the render cycle.
+- `stencilLoadOp_` and `stencilStoreOp_` are essentially the same. They are only needed if the attachment is a combined depth-stencil attachment, in which case you can use different operations for the depth values (those are controlled by `loadOp_` and `storeOp_`) and the stencil values.
+- `initialLayout_` tells Vulkan what layout the respective image will have at the beginning of the render cycle, `finalLayout_` is the layout that Vulkan should leave the attachment in at the end of the render cycle. We'll talk more about image layouts at a later point, for now we'll set our initial layout to `eUndefined` and the final layout to be optimized for use with a surface.
+
+So let's put that into practice and extend our `createRenderPass` function. Since we don't want to be limited to a specific color format we'll just pass that one in as a parameter.
+```cpp
+auto createRenderPass(
+    const vk::Device& logicalDevice,
+    vk::Format colorFormat
+) -> vk::UniqueRenderPass
+{
+    const auto colorAttachment = vk::AttachmentDescription{}
+        .setFormat( colorFormat )
+        .setSamples( vk::SampleCountFlagBits::e1 )
+        .setLoadOp( vk::AttachmentLoadOp::eClear )
+        .setStoreOp( vk::AttachmentStoreOp::eStore )
+        .setStencilLoadOp( vk::AttachmentLoadOp::eDontCare )
+        .setStencilStoreOp( vk::AttachmentStoreOp::eDontCare )
+        .setInitialLayout( vk::ImageLayout::eUndefined )
+        .setFinalLayout( vk::ImageLayout::ePresentSrcKHR );
+
+    const auto renderPassCreateInfo = vk::RenderPassCreateInfo{}
+        .setAttachments( colorAttachment );
+
+    return logicalDevice.createRenderPassUnique( renderPassCreateInfo );
+}
+```
+On the call site we set the format parameter to a default `vk::Format` for the time being:
+```cpp
+const auto renderPass = vcpp::createRenderPass( logicalDevice, vk::Format{} );
+```
+This doesn't yet change much because as described above, we need to define at least one subpass for our render pass.
+
+## Subpasses
+To define a subpass we need the `vk::SubpassDescription` structure:
+```cpp
+struct SubpassDescription
+{
+    ...
+    SubpassDescription& setFlags( SubpassDescriptionFlags flags_ );
+    SubpassDescription& setPipelineBindPoint( PipelineBindPoint pipelineBindPoint_ );
+    SubpassDescription & setInputAttachments( const container_t< const AttachmentReference >& inputAttachments_ );
+    SubpassDescription & setColorAttachments(const container_t< const AttachmentReference >& colorAttachments_ );
+    SubpassDescription & setResolveAttachments(const container_t< const AttachmentReference >& resolveAttachments_ );
+    SubpassDescription & setPDepthStencilAttachment( const AttachmentReference* pDepthStencilAttachment_ );
+    SubpassDescription & setPreserveAttachments( const container_t< const uint32_t >& preserveAttachments_ );
+    ...
+};
+```
+- there are actually a few `flags_` that we could set, but none of them is relevant for us at this point
+- the `pipelineBindPoint_` determines the part of the pipeline that this subpass will use. There's only few choices: `eGraphics`, `eCompute` or `eRayTracingKHR`. Obviously we want to use `eGraphics`.
+- `inputAttachments_` are the attachments that this subpass needs as input, i.e. the ones that already contain valid data which it will use.
+- `colorAttachments_` are the images that this subpass will write its color output to. It is in principle possible to use the same attachment for input and output in one subpass, but there are quite a few tricky details to that, so I'd recommend to not do it unless you're sure you need to.
+- `resolveAttachments_` are used when working with multisampling. They are the single-sample-per-pixel images that the multisampled color attachments will be downsampled to.
+- `depthStencilAttachment_` is - surprise - the image that will receive the depth and stencil data. As you see there can only be one of those, but we don't need one anyway for now.
+- `preserveAttachments` tells Vulkan explicitly to leave those attachments alone although the subpass doesn't use them. This is needed if you have 3 or more subpasses and want to use an attachment that was rendered to in a subpass other than the previous one. Without referencing that attachment in the `preserveAttachments_` field, Vulkan might assume that you're done with it and apply some optimization that destroys its content. Since we only have one subpass we can leave this parameter alone for now.
+
+So it looks like we only need one `AttachmentReference` for our color attachment. Defining an `AttachmentReference` is pretty simple for a change:
+```cpp
+struct AttachmentReference
+{
+    ...
+    AttachmentReference& setAttachment( uint32_t attachment_ );
+    AttachmentReference& setLayout( ImageLayout layout_ );
+    ...
+};
+```
+- `attachment_` is the index of the attachment in the `attachments_` container in `RenderPassCreateInfo` (see above).
+- `layout_` tells Vulkan which layout the subpass can expect the respective attachment to have. For our standard color attachment we'll use `eColorAttachmentOptimal`.
+
+And with all that information we can now finally complete the creation of our render pass:
+```cpp
+auto createRenderPass(
+    const vk::Device& logicalDevice,
+    vk::Format colorFormat
+) -> vk::UniqueRenderPass
+{
+    const auto colorAttachment = vk::AttachmentDescription{}
+        .setFormat( colorFormat )
+        .setSamples( vk::SampleCountFlagBits::e1 )
+        .setLoadOp( vk::AttachmentLoadOp::eClear )
+        .setStoreOp( vk::AttachmentStoreOp::eStore )
+        .setStencilLoadOp( vk::AttachmentLoadOp::eDontCare )
+        .setStencilStoreOp( vk::AttachmentStoreOp::eDontCare )
+        .setInitialLayout( vk::ImageLayout::eUndefined )
+        .setFinalLayout( vk::ImageLayout::ePresentSrcKHR );
+
+    const auto colorAttachmentRef = vk::AttachmentReference{}
+        .setAttachment( 0 )
+        .setLayout( vk::ImageLayout::eColorAttachmentOptimal );
+
+    const auto subpass = vk::SubpassDescription{}
+        .setPipelineBindPoint( vk::PipelineBindPoint::eGraphics )
+        .setColorAttachments( colorAttachmentRef );
+
+    const auto renderPassCreateInfo = vk::RenderPassCreateInfo{}
+        .setAttachments( colorAttachment )
+        .setSubpasses( subpass );
+
+    return logicalDevice.createRenderPassUnique( renderPassCreateInfo );
+}
+```
+Compile and run this version - et voila! We still get two validation errors and one warning, but the exception is finally gone.

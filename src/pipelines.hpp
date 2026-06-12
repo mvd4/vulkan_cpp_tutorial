@@ -47,7 +47,10 @@ namespace vcpp
 
     auto createDescriptorPool( const vk::Device& logicalDevice ) -> vk::UniqueDescriptorPool;
 
-    auto createRenderPass( const vk::Device& logicalDevice ) -> vk::UniqueRenderPass;
+    auto createRenderPass(
+        const vk::Device& logicalDevice,
+        vk::Format colorFormat
+    ) -> vk::UniqueRenderPass;
 
     auto createGraphicsPipeline(
         const vk::Device& logicalDevice,
