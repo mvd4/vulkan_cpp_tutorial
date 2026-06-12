@@ -26,9 +26,9 @@ auto createGraphicsPipeline(
     ...
 }
 ```
-... and create a second version of the createPipelineLayout function to return an empty layout:
+... and create another creation function to return an empty layout[^1]:
 ```cpp
-auto createPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout
+auto createGraphicsPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout
 {
     return logicalDevice.createPipelineLayoutUnique( vk::PipelineLayoutCreateInfo{} );
 }
@@ -39,9 +39,9 @@ The `RenderPass` structure might be a bit confusing at first, not least because 
 
 So conceptually the render pass is not that different from the pipeline layout. The attachments correspond to the descriptor bindings in that they are the logical representation of concrete data structures that will be bound to the pipeline when that is executed. The equivalent to the descriptor set is called 'framebuffer' (because it stores the data for one rendered frame):
 
-![Comparison between the Pipeline Layout and Descriptor Set with Bindings and the Render Pass and Framebuffer with Attachments](images/Pipeline_Layout_and_Render_Pass.png "Fig. 2: Pipeline Layout vs Render Pass")
+![Comparison between the Pipeline Layout and Descriptor Set with Bindings and the Render Pass and Framebuffer with Attachments](images/Pipeline_Layout_and_Render_Pass.png "Fig. 1: Pipeline Layout vs Render Pass")
 
-But why is the structure called 'render pass' and not something like 'output layout' or 'target layout'? My guess is that the name was chosen because a new framebuffer is bound to the attachments for every frame, i.e. for every pass of the render loop. I still think something like 'RenderTargetLayout' or so would have been less confusing, all the more since the actual cycle of the pipeline to produce one frame is also typically referred to as a render pass.
+But why is the structure called 'render pass' and not something like 'output layout' or 'target layout'? My guess is that the name was chosen because a framebuffer is bound to the attachments for every frame, i.e. for every pass of the render loop. I still think something like 'RenderTargetLayout' or so would have been less confusing, all the more since the actual cycle of the pipeline to produce one frame is also typically referred to as a render pass.
 
 Anyway, the data structure we need to describe a render pass looks like this:
 ```cpp
@@ -98,12 +98,12 @@ auto createGraphicsPipeline(
 ```cpp
 // main.cpp
 
-int main()
+auto main() -> int
 {
     ...
     const auto renderPass = vcpp::createRenderPass( logicalDevice );
 
-    const auto pipelineLayout = vcpp::createPipelineLayout( logicalDevice );
+    const auto pipelineLayout = vcpp::createGraphicsPipelineLayout( logicalDevice );
 
     const auto pipeline = vcpp::createGraphicsPipeline(
         logicalDevice,
@@ -273,13 +273,15 @@ struct SurfaceFormatKHR
 ```
 Alright, seems like this is pretty straightforward, we just have to use the `format` property (we'll talk about color spaces in a later lesson).
 
-Which leaves the question which format we should select if the surface supports more than one format and so the vector has more than one entry. In a real world application you'd probably have to create a sort of heuristic to find the supported color format that best matches your use case. We'll go with the simplest approach here and just use the first format available[^1]:
+Which leaves the question which format we should select if the surface supports more than one format and so the vector has more than one entry. In a real world application you'd probably have to create a sort of heuristic to find the supported color format that best matches your use case. We'll go with the simplest approach here and just use the first format available[^2]:
 ```cpp
-const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR( *surface );
+if ( surfaceFormats.empty() )
+    throw std::runtime_error( "Surface does not support any formats" );
 const auto renderPass = vcpp::createRenderPass( logicalDevice, surfaceFormats[0].format );
 ```
 And with that we're down to only one remaining validation error. The last thing is that Vulkan is complaining about the VK_KHR_swapchain extension being required. That's what we're going to address in the next lesson.
 
 ---
 
-[^1]: As said before: if you encounter problems with this simplistic approach, please let me know and I'll extend the tutorial to make it work for you as well.
+[^1]: I'm leaving all the compute-pipeline related stuff in for reference, and for potential future re-use. I think it shouldn't be too confusing.
+[^2]: As said before: if you encounter problems with this simplistic approach, please let me know and I'll extend the tutorial to make it work for you as well.

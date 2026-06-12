@@ -69,12 +69,12 @@ namespace vcpp
         return logicalDevice.createDescriptorSetLayoutUnique( descriptorSetLayoutCreateInfo );
     }
 
-    auto createPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout
+    auto createGraphicsPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout
     {
         return logicalDevice.createPipelineLayoutUnique( vk::PipelineLayoutCreateInfo{} );
     }
 
-    auto createPipelineLayout(
+    auto createComputePipelineLayout(
         const vk::Device& logicalDevice,
         const vk::DescriptorSetLayout& descriptorSetLayout
     ) -> vk::UniquePipelineLayout

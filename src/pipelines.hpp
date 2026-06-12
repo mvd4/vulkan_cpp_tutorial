@@ -32,9 +32,9 @@ namespace vcpp
 
     auto createDescriptorSetLayout( const vk::Device& logicalDevice ) -> vk::UniqueDescriptorSetLayout;
 
-    auto createPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout;
+    auto createGraphicsPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout;
 
-    auto createPipelineLayout(
+    auto createComputePipelineLayout(
         const vk::Device& logicalDevice,
         const vk::DescriptorSetLayout& descriptorSetLayout
     ) -> vk::UniquePipelineLayout;

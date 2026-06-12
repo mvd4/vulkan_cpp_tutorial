@@ -23,6 +23,7 @@ License.
 #include "pipelines.hpp"
 
 #include <iostream>
+#include <stdexcept>
 
 
 auto main() -> int
@@ -49,9 +50,11 @@ auto main() -> int
         const auto fragmentShader = vcpp::createShaderModule( logicalDevice, "./shaders/fragment.frag.spv" );
 
         const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR( *surface );
+        if ( surfaceFormats.empty() )
+            throw std::runtime_error( "Surface does not support any formats" );
         const auto renderPass = vcpp::createRenderPass( logicalDevice, surfaceFormats[0].format );
 
-        const auto pipelineLayout = vcpp::createPipelineLayout( logicalDevice );
+        const auto pipelineLayout = vcpp::createGraphicsPipelineLayout( logicalDevice );
 
         const auto pipeline = vcpp::createGraphicsPipeline(
             logicalDevice,
