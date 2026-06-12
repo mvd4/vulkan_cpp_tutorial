@@ -73,7 +73,7 @@ auto createGraphicsPipeline(
 ```
 ... and modify our `main` function like so:
 ```cpp
-int main()
+auto main() -> int
 {
     constexpr int windowWidth = 800;
     constexpr int windowHeight = 600;
@@ -172,7 +172,7 @@ struct PipelineColorBlendStateCreateInfo
     ...
     PipelineColorBlendStateCreateInfo& setAttachments( const container_t< const vk::PipelineColorBlendAttachmentState >& attachments_ );
     ...
-}
+};
 ```
 This time we also don't get away with simply using a default constructed `PipelineColorBlendAttachmentState`. Instead we need to disable color blending explicitly but still instruct Vulkan which color channels we want to write:
 ```cpp
@@ -199,6 +199,18 @@ const auto colorBlendState = vk::PipelineColorBlendStateCreateInfo{}
     .setAttachments( colorBlendAttachment );
 ```
 
+With that final piece in place, our complete `pipelineCreateInfo` now references every state we've configured so far:
+```cpp
+const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
+    .setStages( shaderStageInfos )
+    .setPVertexInputState( &vertexInputState )
+    .setPInputAssemblyState( &inputAssemblyState )
+    .setPViewportState( &viewportState )
+    .setPRasterizationState( &rasterizationState )
+    .setPMultisampleState( &multisampleState )
+    .setPColorBlendState( &colorBlendState );
+```
+
 Running this version you'll still get validation errors and a crash. The most telling one will be along the lines of:
 
 ```
@@ -209,5 +221,5 @@ This is because Vulkan requires a valid pipeline layout to be set on the `Graphi
 
 ---
 
-[^1]: Perspective transformation is essentially the virtual camera with which you look at the scene and usually happens in the vertex shader. Mathematically speaking it transforms the coordinates of each vertex from the view space to a normalized space, i.e. the output coordinates are in the range -1...1 for x and y and 0...1 for z. We'll get into more details in a later session.
+[^1]: Perspective transformation is essentially the virtual camera with which you look at the scene and usually happens in the vertex shader. Mathematically speaking it transforms the coordinates of each vertex from the view space into clip space; after the subsequent perspective divide (dividing by the w-component) the resulting normalized device coordinates lie in the range -1...1 for x and y and 0...1 for z. We'll get into more details in a later session.
 [^2]: Note that multi-viewport support is not mandatory to be implemented in your graphics driver, so you need to check the `maxViewports` member of the `PhysicalDeviceLimits` described in lesson 3 if you want to make use of that feature.
