@@ -48,7 +48,8 @@ auto main() -> int
         const auto vertexShader = vcpp::createShaderModule( logicalDevice, "./shaders/vertex.vert.spv" );
         const auto fragmentShader = vcpp::createShaderModule( logicalDevice, "./shaders/fragment.frag.spv" );
 
-        const auto renderPass = vcpp::createRenderPass( logicalDevice, vk::Format{} );
+        const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR( *surface );
+        const auto renderPass = vcpp::createRenderPass( logicalDevice, surfaceFormats[0].format );
 
         const auto pipelineLayout = vcpp::createPipelineLayout( logicalDevice );
 

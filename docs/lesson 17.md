@@ -247,3 +247,39 @@ auto createRenderPass(
 }
 ```
 Compile and run this version - et voila! We still get two validation errors and one warning, but the exception is finally gone.
+
+One of the errors and the warning are caused by us calling `createRenderPass` with a default-constructed color format, so let's change that next.
+
+## Color Format
+As mentioned above, the color format basically describes how the color information for each pixel is represented in memory. That is definitely good to know, but it doesn't really help us decide which format we should use. And there are many possible formats.
+Thinking about it, what we want to do with the rendered image is to display it on screen. Or, more precisely we want to display it in our window. So we probably want the color format to be compatible to the surface we created in lesson 13. Is there a way to find out which color format our surface expects?
+
+Turns out there is:
+```cpp
+class PhysicalDevice
+{
+    ...
+    std::vector< vk::SurfaceFormatKHR > getSurfaceFormatsKHR( vk::SurfaceKHR surface, ... ) const;
+    ...
+};
+```
+So this one returns a vector of `SurfaceFormatKHR` which probably is not the same as a `vk::Format`. Let's have a look:
+```cpp
+struct SurfaceFormatKHR
+{
+    Format format;
+    ColorSpaceKHR colorSpace;
+};
+```
+Alright, seems like this is pretty straightforward, we just have to use the `format` property (we'll talk about color spaces in a later lesson).
+
+Which leaves the question which format we should select if the surface supports more than one format and so the vector has more than one entry. In a real world application you'd probably have to create a sort of heuristic to find the supported color format that best matches your use case. We'll go with the simplest approach here and just use the first format available[^1]:
+```cpp
+const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR( *surface );
+const auto renderPass = vcpp::createRenderPass( logicalDevice, surfaceFormats[0].format );
+```
+And with that we're down to only one remaining validation error. The last thing is that Vulkan is complaining about the VK_KHR_swapchain extension being required. That's what we're going to address in the next lesson.
+
+---
+
+[^1]: As said before: if you encounter problems with this simplistic approach, please let me know and I'll extend the tutorial to make it work for you as well.
