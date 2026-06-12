@@ -32,6 +32,8 @@ namespace vcpp
 
     auto createDescriptorSetLayout( const vk::Device& logicalDevice ) -> vk::UniqueDescriptorSetLayout;
 
+    auto createPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout;
+
     auto createPipelineLayout(
         const vk::Device& logicalDevice,
         const vk::DescriptorSetLayout& descriptorSetLayout
@@ -45,10 +47,14 @@ namespace vcpp
 
     auto createDescriptorPool( const vk::Device& logicalDevice ) -> vk::UniqueDescriptorPool;
 
+    auto createRenderPass( const vk::Device& logicalDevice ) -> vk::UniqueRenderPass;
+
     auto createGraphicsPipeline(
         const vk::Device& logicalDevice,
+        const vk::PipelineLayout& pipelineLayout,
         const vk::ShaderModule& vertexShader,
         const vk::ShaderModule& fragmentShader,
+        const vk::RenderPass& renderPass,
         const vk::Extent2D& viewportExtent
     ) -> vk::UniquePipeline;
 }

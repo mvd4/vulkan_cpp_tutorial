@@ -69,6 +69,11 @@ namespace vcpp
         return logicalDevice.createDescriptorSetLayoutUnique( descriptorSetLayoutCreateInfo );
     }
 
+    auto createPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout
+    {
+        return logicalDevice.createPipelineLayoutUnique( vk::PipelineLayoutCreateInfo{} );
+    }
+
     auto createPipelineLayout(
         const vk::Device& logicalDevice,
         const vk::DescriptorSetLayout& descriptorSetLayout
@@ -108,10 +113,18 @@ namespace vcpp
         return logicalDevice.createDescriptorPoolUnique( poolCreateInfo );
     }
 
+    auto createRenderPass( const vk::Device& logicalDevice ) -> vk::UniqueRenderPass
+    {
+        const auto renderPassCreateInfo = vk::RenderPassCreateInfo{};
+        return logicalDevice.createRenderPassUnique( renderPassCreateInfo );
+    }
+
     auto createGraphicsPipeline(
         const vk::Device& logicalDevice,
+        const vk::PipelineLayout& pipelineLayout,
         const vk::ShaderModule& vertexShader,
         const vk::ShaderModule& fragmentShader,
+        const vk::RenderPass& renderPass,
         const vk::Extent2D& viewportExtent
     ) -> vk::UniquePipeline
     {
@@ -170,7 +183,9 @@ namespace vcpp
             .setPViewportState( &viewportState )
             .setPRasterizationState( &rasterizationState )
             .setPMultisampleState( &multisampleState )
-            .setPColorBlendState( &colorBlendState );
+            .setPColorBlendState( &colorBlendState )
+            .setLayout( pipelineLayout )
+            .setRenderPass( renderPass );
 
         return logicalDevice.createGraphicsPipelineUnique(
             vk::PipelineCache{},

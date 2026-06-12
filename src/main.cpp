@@ -48,10 +48,16 @@ auto main() -> int
         const auto vertexShader = vcpp::createShaderModule( logicalDevice, "./shaders/vertex.vert.spv" );
         const auto fragmentShader = vcpp::createShaderModule( logicalDevice, "./shaders/fragment.frag.spv" );
 
+        const auto renderPass = vcpp::createRenderPass( logicalDevice );
+
+        const auto pipelineLayout = vcpp::createPipelineLayout( logicalDevice );
+
         const auto pipeline = vcpp::createGraphicsPipeline(
             logicalDevice,
+            *pipelineLayout,
             *vertexShader,
             *fragmentShader,
+            *renderPass,
             vk::Extent2D{ windowWidth, windowHeight }
         );
 
