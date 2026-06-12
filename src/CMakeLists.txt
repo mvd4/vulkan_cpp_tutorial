@@ -24,13 +24,25 @@ set( SHADER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/shaders" )
 set( SHADER_BINARY_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>/shaders" )
 
 add_custom_command(
-    OUTPUT  "${SHADER_BINARY_DIR}/compute.comp.spv"
+    OUTPUT  "${SHADER_BINARY_DIR}/vertex.vert.spv"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_BINARY_DIR}"
-    COMMAND ${Vulkan_GLSLC_EXECUTABLE} "${SHADER_SOURCE_DIR}/compute.comp" -o "${SHADER_BINARY_DIR}/compute.comp.spv"
-    DEPENDS "${SHADER_SOURCE_DIR}/compute.comp"
-    COMMENT "Compiling compute shader"
+    COMMAND ${Vulkan_GLSLC_EXECUTABLE} "${SHADER_SOURCE_DIR}/vertex.vert" -o "${SHADER_BINARY_DIR}/vertex.vert.spv"
+    DEPENDS "${SHADER_SOURCE_DIR}/vertex.vert"
+    COMMENT "Compiling vertex shader"
     VERBATIM
 )
 
-add_custom_target( shaders DEPENDS "${SHADER_BINARY_DIR}/compute.comp.spv" )
+add_custom_command(
+    OUTPUT  "${SHADER_BINARY_DIR}/fragment.frag.spv"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_BINARY_DIR}"
+    COMMAND ${Vulkan_GLSLC_EXECUTABLE} "${SHADER_SOURCE_DIR}/fragment.frag" -o "${SHADER_BINARY_DIR}/fragment.frag.spv"
+    DEPENDS "${SHADER_SOURCE_DIR}/fragment.frag"
+    COMMENT "Compiling fragment shader"
+    VERBATIM
+)
+
+add_custom_target( shaders DEPENDS
+    "${SHADER_BINARY_DIR}/vertex.vert.spv"
+    "${SHADER_BINARY_DIR}/fragment.frag.spv"
+)
 add_dependencies( ${TARGET_NAME} shaders )

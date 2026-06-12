@@ -108,9 +108,25 @@ namespace vcpp
         return logicalDevice.createDescriptorPoolUnique( poolCreateInfo );
     }
 
-    auto createGraphicsPipeline( const vk::Device& logicalDevice ) -> vk::UniquePipeline
+    auto createGraphicsPipeline(
+        const vk::Device& logicalDevice,
+        const vk::ShaderModule& vertexShader,
+        const vk::ShaderModule& fragmentShader
+    ) -> vk::UniquePipeline
     {
-        const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{};
+        const auto shaderStageInfos = std::vector< vk::PipelineShaderStageCreateInfo >{
+        vk::PipelineShaderStageCreateInfo{}
+            .setStage( vk::ShaderStageFlagBits::eVertex )
+            .setPName( "main" )
+            .setModule( vertexShader ),
+        vk::PipelineShaderStageCreateInfo{}
+            .setStage( vk::ShaderStageFlagBits::eFragment )
+            .setPName( "main" )
+            .setModule( fragmentShader ),
+        };
+
+        const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
+            .setStages( shaderStageInfos );
 
         return logicalDevice.createGraphicsPipelineUnique(
             vk::PipelineCache{},

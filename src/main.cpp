@@ -42,7 +42,14 @@ auto main() -> int
             *surface
         );
 
-        const auto pipeline = vcpp::createGraphicsPipeline( logicalDevice );
+        const auto vertexShader = vcpp::createShaderModule( logicalDevice, "./shaders/vertex.vert.spv" );
+        const auto fragmentShader = vcpp::createShaderModule( logicalDevice, "./shaders/fragment.frag.spv" );
+
+        const auto pipeline = vcpp::createGraphicsPipeline(
+            logicalDevice,
+            *vertexShader,
+            *fragmentShader
+        );
 
         while ( !glfwWindowShouldClose( window.get() ) )
         {

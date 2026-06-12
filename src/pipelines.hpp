@@ -45,5 +45,9 @@ namespace vcpp
 
     auto createDescriptorPool( const vk::Device& logicalDevice ) -> vk::UniqueDescriptorPool;
 
-    auto createGraphicsPipeline( const vk::Device& logicalDevice ) -> vk::UniquePipeline;
+    auto createGraphicsPipeline(
+        const vk::Device& logicalDevice,
+        const vk::ShaderModule& vertexShader,
+        const vk::ShaderModule& fragmentShader
+    ) -> vk::UniquePipeline;
 }
