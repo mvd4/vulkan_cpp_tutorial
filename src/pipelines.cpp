@@ -111,7 +111,8 @@ namespace vcpp
     auto createGraphicsPipeline(
         const vk::Device& logicalDevice,
         const vk::ShaderModule& vertexShader,
-        const vk::ShaderModule& fragmentShader
+        const vk::ShaderModule& fragmentShader,
+        const vk::Extent2D& viewportExtent
     ) -> vk::UniquePipeline
     {
         const auto shaderStageInfos = std::array< vk::PipelineShaderStageCreateInfo, 2 >{
@@ -129,10 +130,25 @@ namespace vcpp
         const auto inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{}
             .setTopology( vk::PrimitiveTopology::eTriangleList );
 
+        const auto viewport = vk::Viewport{}
+            .setX( 0.f )
+            .setY( 0.f )
+            .setWidth( static_cast< float >( viewportExtent.width ) )
+            .setHeight( static_cast< float >( viewportExtent.height ) )
+            .setMinDepth( 0.f )
+            .setMaxDepth( 1.f );
+
+        const auto scissor = vk::Rect2D{ { 0, 0 }, viewportExtent };
+
+        const auto viewportState = vk::PipelineViewportStateCreateInfo{}
+            .setViewports( viewport )
+            .setScissors( scissor );
+
         const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
             .setStages( shaderStageInfos )
             .setPVertexInputState( &vertexInputState )
-            .setPInputAssemblyState( &inputAssemblyState );
+            .setPInputAssemblyState( &inputAssemblyState )
+            .setPViewportState( &viewportState );
 
         return logicalDevice.createGraphicsPipelineUnique(
             vk::PipelineCache{},

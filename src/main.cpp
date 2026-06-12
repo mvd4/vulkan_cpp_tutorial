@@ -27,10 +27,13 @@ License.
 
 auto main() -> int
 {
+    constexpr int windowWidth = 800;
+    constexpr int windowHeight = 600;
+
     try
     {
         const auto glfw = vcpp::GlfwInstance{};
-        const auto window = vcpp::createWindow( 800, 600, "Vulkan C++ Tutorial" );
+        const auto window = vcpp::createWindow( windowWidth, windowHeight, "Vulkan C++ Tutorial" );
 
         const auto instance = vcpp::createVulkanInstance( vcpp::getRequiredExtensionsForGlfw() );
         const auto surface = vcpp::createSurface( *instance, *window );
@@ -48,7 +51,8 @@ auto main() -> int
         const auto pipeline = vcpp::createGraphicsPipeline(
             logicalDevice,
             *vertexShader,
-            *fragmentShader
+            *fragmentShader,
+            vk::Extent2D{ windowWidth, windowHeight }
         );
 
         while ( !glfwWindowShouldClose( window.get() ) )
