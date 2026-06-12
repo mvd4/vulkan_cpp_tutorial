@@ -95,6 +95,70 @@ int main()
 }
 ```
 
+## Rasterization state
+Next in line is the rasterization state. Here's the interface:
+```cpp
+struct PipelineRasterizationStateCreateInfo
+{
+    ...
+    PipelineRasterizationStateCreateInfo& setFlags( PipelineRasterizationStateCreateFlags flags_ );
+    PipelineRasterizationStateCreateInfo& setDepthClampEnable( Bool32 depthClampEnable_ );
+    PipelineRasterizationStateCreateInfo& setRasterizerDiscardEnable( Bool32 rasterizerDiscardEnable_ );
+    PipelineRasterizationStateCreateInfo& setPolygonMode( PolygonMode polygonMode_ );
+    PipelineRasterizationStateCreateInfo& setCullMode( CullModeFlags cullMode_ );
+    PipelineRasterizationStateCreateInfo& setFrontFace( FrontFace frontFace_ );
+    PipelineRasterizationStateCreateInfo& setDepthBiasEnable( Bool32 depthBiasEnable_ );
+    PipelineRasterizationStateCreateInfo& setDepthBiasConstantFactor( float depthBiasConstantFactor_ );
+    PipelineRasterizationStateCreateInfo& setDepthBiasClamp( float depthBiasClamp_ );
+    PipelineRasterizationStateCreateInfo& setDepthBiasSlopeFactor( float depthBiasSlopeFactor_ );
+    PipelineRasterizationStateCreateInfo& setLineWidth( float lineWidth_ );
+    ...
+};
+```
+Okay, so there's actually quite a number of parameters to configure this stage. Let's have a closer look:
+- the `flags_` are once more reserved for future use and therefore not relevant for us
+- `depthClampEnable_` controls whether calculated depth values are clamped to the viewport's min and max depth values instead of being clipped. Normally any fragment whose depth falls outside the [minDepth, maxDepth] range is discarded. Clamping keeps those fragments by pinning their depth to the nearest boundary. The classic use-case is shadow mapping: geometry that extends beyond the light's far plane would otherwise punch holes in the shadow map, and depth clamping neatly prevents that.
+- `rasterizerDiscardEnable_` can be used to turn off the whole rasterization stage (and all subsequent stages with it). This might be useful if you want to use the results of the calculations in preceding shader stages for something else than drawing.
+- `setPolygonMode` controls whether Vulkan will draw only points, lines or filled primitives. This is not the same as the topology from the input assembly stage: that one controlled how the vertices are to be combined to shapes while the `polygonMode_` here only changes how the resulting geometry is rasterized.
+- `setCullMode` and `setFrontFace` control the back face culling optimization's behaviour. We'll get to that eventually, but for now let's just leave the parameters at their defaults.
+- the depth bias functions are related to a more advanced technique that helps prevent rendering errors which are caused by rounding effects when calculating the depth values of different primitives. We won't need that for our single triangle either.
+- the `lineWidth_` is only relevant when rasterizing in the polygon mode `vk::PolygonMode::eLines`. Which means we don't really need that, however we're still required to set it and the validation will yell at us if we set anything but 1.0.
+
+So, it turns out that it's actually not that complicated to set the rasterization parameters for our use case:
+```cpp
+const auto rasterizationState = vk::PipelineRasterizationStateCreateInfo{}
+    .setDepthClampEnable( false )
+    .setRasterizerDiscardEnable( false )
+    .setPolygonMode( vk::PolygonMode::eFill )
+    .setLineWidth( 1.f );
+```
+If you run this version you might spot that one of the error messages has changed and is now complaining about the multisample state missing. That one's next on our list so let's get right to it.
+
+## Multisampling
+As I mentioned in lesson 14 we won't be using multisampling for now, but Vulkan requires us to configure it anyway. Luckily we can just use a default-constructed `PipelineMultisampleStateCreateInfo`:
+```cpp
+auto createGraphicsPipeline(
+    const vk::Device& logicalDevice,
+    const vk::ShaderModule& vertexShader,
+    const vk::ShaderModule& fragmentShader,
+    const vk::Extent2D& viewportExtent
+) -> vk::UniquePipeline
+{
+    ...
+
+    const auto multisampleState = vk::PipelineMultisampleStateCreateInfo{};
+
+    const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
+        .setStages( shaderStageInfos )
+        .setPVertexInputState( &vertexInputState )
+        .setPInputAssemblyState( &inputAssemblyState )
+        .setPViewportState( &viewportState )
+        .setPRasterizationState( &rasterizationState )
+        .setPMultisampleState( &multisampleState );
+    ...
+}
+```
+And with that we're yet another error down. Yay!
 ---
 
 [^1]: Perspective transformation is essentially the virtual camera with which you look at the scene and usually happens in the vertex shader. Mathematically speaking it transforms the coordinates of each vertex from the view space to a normalized space, i.e. the output coordinates are in the range -1...1 for x and y and 0...1 for z. We'll get into more details in a later session.

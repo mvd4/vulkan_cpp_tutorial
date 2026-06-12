@@ -144,11 +144,21 @@ namespace vcpp
             .setViewports( viewport )
             .setScissors( scissor );
 
+        const auto rasterizationState = vk::PipelineRasterizationStateCreateInfo{}
+            .setDepthClampEnable( false )
+            .setRasterizerDiscardEnable( false )
+            .setPolygonMode( vk::PolygonMode::eFill )
+            .setLineWidth( 1.f );
+
+        const auto multisampleState = vk::PipelineMultisampleStateCreateInfo{};
+
         const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
             .setStages( shaderStageInfos )
             .setPVertexInputState( &vertexInputState )
             .setPInputAssemblyState( &inputAssemblyState )
-            .setPViewportState( &viewportState );
+            .setPViewportState( &viewportState )
+            .setPRasterizationState( &rasterizationState )
+            .setPMultisampleState( &multisampleState );
 
         return logicalDevice.createGraphicsPipelineUnique(
             vk::PipelineCache{},
