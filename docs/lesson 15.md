@@ -10,7 +10,7 @@ auto createGraphicsPipeline(
     const vk::ShaderModule& fragmentShader
 ) -> vk::UniquePipeline
 {
-    const auto shaderStageInfos = std::vector< vk::PipelineShaderStageCreateInfo >{
+    const auto shaderStageInfos = std::array< vk::PipelineShaderStageCreateInfo, 2 >{
         vk::PipelineShaderStageCreateInfo{}
             .setStage( vk::ShaderStageFlagBits::eVertex )
             .setPName( "main" )
@@ -27,6 +27,7 @@ auto createGraphicsPipeline(
     return logicalDevice.createGraphicsPipelineUnique( vk::PipelineCache{}, pipelineCreateInfo ).value;
 }
 ```
+Note that the order of the entries in `shaderStageInfos` is irrelevant: Vulkan identifies each stage by its `setStage(...)` value, not by its position in the container, so listing the fragment shader before the vertex shader would work just as well.
 So far, so good. We don't have those shaders yet though. Let's change that.
 
 ## Vertex and fragment shader
@@ -34,10 +35,10 @@ We already know how to write a shader in principle, so let's get going right awa
 ```glsl
 #version 450
 
-vec4 positions[3] = vec4[](
-    vec4(0.0, -0.5, 0.0, 1.0 ),
-    vec4(0.5, 0.5, 0.0, 1.0 ),
-    vec4(-0.5, 0.5, 0.0, 1.0 )
+const vec4 positions[3] = vec4[](
+    vec4(0.0, -0.5, 0.0, 1.0),
+    vec4(0.5, 0.5, 0.0, 1.0),
+    vec4(-0.5, 0.5, 0.0, 1.0)
 );
 ```
 You might wonder why I use 4-dimensional vectors here to define positions in a 3D space. The answer is that the 4th component (the w-component[^1]) facilitates some important mathematical operations that we will want to perform on these coordinates at some point, e.g. transformations and perspective. We'll get into more detail later, as you can see we just set the 4th component to 1 for now.
@@ -71,7 +72,7 @@ Let's move on to the fragment shader now. The first step is to specify the outpu
 
 layout(location = 0) out vec4 outColor;
 ```
-You might wonder why we need to do that. Isn't there a builtin variable similar to `gl_Position` that takes in the fragment shader output? No there isn't, and for good reason: in a simple graphics pipeline like the one we're going to create at first, the output is indeed always a single 32-bit color value. But there are applications where you might want a different color format. Or, in more complex scenarios, you might want to output to multiple targets at the same time (e.g. not only a color value but also the depth value or texture coordinate for the respective fragment). Bottom line: to enable this kind of flexibility, Vulkan can not make any assumptions about the output of the fragment shader.
+You might wonder why we need to do that. Isn't there a builtin variable similar to `gl_Position` that takes in the fragment shader output? No there isn't, and for good reason: in a simple graphics pipeline like the one we're going to create at first, the output is indeed always a single color value. But there are applications where you might want a different color format (the number of components and bits per component depends on the attachment format). Or, in more complex scenarios, you might want to output to multiple targets at the same time (e.g. not only a color value but also the depth value or texture coordinate for the respective fragment). Bottom line: to enable this kind of flexibility, Vulkan can not make any assumptions about the output of the fragment shader.
 
 Alright, so now we need to fill that output color we defined with a value. We'll again choose the simplest path for now and just always output a pure red:
 ```glsl
@@ -144,7 +145,7 @@ auto createGraphicsPipeline(
     const vk::ShaderModule& fragmentShader
 ) -> vk::UniquePipeline
 {
-    const auto shaderStageInfos = std::vector< vk::PipelineShaderStageCreateInfo >{
+    const auto shaderStageInfos = std::array< vk::PipelineShaderStageCreateInfo, 2 >{
         vk::PipelineShaderStageCreateInfo{}
             .setStage( vk::ShaderStageFlagBits::eVertex )
             .setPName( "main" )
@@ -175,5 +176,5 @@ If you compile and run this version, you'll still get validation warnings and th
 ---
 
 [^1]: The w-component is part of what's called homogeneous coordinates. It enables operations like perspective projection and affine transformations to be represented as matrix multiplications.
-[^2]: Normalized device coordinates (NDC) in Vulkan range from -1.0 to 1.0 on both the X and Y axes, with the Y axis pointing downward. These are the coordinates that the GPU uses after all transformations have been applied.
+[^2]: Normalized device coordinates (NDC) in Vulkan range from -1.0 to 1.0 on both the X and Y axes, with the Y axis pointing downward. The Z axis, on the other hand, ranges from 0.0 to 1.0 (unlike OpenGL, where it goes from -1.0 to 1.0); we'll come back to this when we deal with depth. These are the coordinates that the GPU uses after all transformations have been applied.
 [^3]: In a bigger project with many shaders this explicit adding of a custom command for each shader file will quickly become cumbersome and bloat the CMake file. In that case, a loop iterating over all shader source files would be the better option. For our small demo application the current solution is okay I think.

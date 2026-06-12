@@ -114,15 +114,15 @@ namespace vcpp
         const vk::ShaderModule& fragmentShader
     ) -> vk::UniquePipeline
     {
-        const auto shaderStageInfos = std::vector< vk::PipelineShaderStageCreateInfo >{
-        vk::PipelineShaderStageCreateInfo{}
-            .setStage( vk::ShaderStageFlagBits::eVertex )
-            .setPName( "main" )
-            .setModule( vertexShader ),
-        vk::PipelineShaderStageCreateInfo{}
-            .setStage( vk::ShaderStageFlagBits::eFragment )
-            .setPName( "main" )
-            .setModule( fragmentShader ),
+        const auto shaderStageInfos = std::array< vk::PipelineShaderStageCreateInfo, 2 >{
+            vk::PipelineShaderStageCreateInfo{}
+                .setStage( vk::ShaderStageFlagBits::eVertex )
+                .setPName( "main" )
+                .setModule( vertexShader ),
+            vk::PipelineShaderStageCreateInfo{}
+                .setStage( vk::ShaderStageFlagBits::eFragment )
+                .setPName( "main" )
+                .setModule( fragmentShader ),
         };
 
         const auto vertexInputState = vk::PipelineVertexInputStateCreateInfo{};
