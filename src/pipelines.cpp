@@ -152,13 +152,25 @@ namespace vcpp
 
         const auto multisampleState = vk::PipelineMultisampleStateCreateInfo{};
 
+        const auto colorBlendAttachment = vk::PipelineColorBlendAttachmentState{}
+            .setBlendEnable( false )
+            .setColorWriteMask(
+                vk::ColorComponentFlagBits::eR |
+                vk::ColorComponentFlagBits::eG |
+                vk::ColorComponentFlagBits::eB |
+                vk::ColorComponentFlagBits::eA );
+
+        const auto colorBlendState = vk::PipelineColorBlendStateCreateInfo{}
+            .setAttachments( colorBlendAttachment );
+
         const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
             .setStages( shaderStageInfos )
             .setPVertexInputState( &vertexInputState )
             .setPInputAssemblyState( &inputAssemblyState )
             .setPViewportState( &viewportState )
             .setPRasterizationState( &rasterizationState )
-            .setPMultisampleState( &multisampleState );
+            .setPMultisampleState( &multisampleState )
+            .setPColorBlendState( &colorBlendState );
 
         return logicalDevice.createGraphicsPipelineUnique(
             vk::PipelineCache{},

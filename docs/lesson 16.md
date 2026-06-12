@@ -159,6 +159,54 @@ auto createGraphicsPipeline(
 }
 ```
 And with that we're yet another error down. Yay!
+
+As mentioned before, we'll not be using the depth stencil state for now since we will only draw one triangle in the beginning. And in this case we also don't need to do anything to satisfy Vulkan, so let's move on to the color blending configuration.
+
+## Color blending
+Color blending is what happens after the graphics pipeline has determined the color of a fragment and updates the corresponding framebuffer image accordingly. In the simplest case the new color just replaces whatever color was stored in that location before. This is the behavior when blending is disabled and this is what we want to do for now. Nevertheless, Vulkan requires us to be explicit here again and provide a `PipelineColorBlendStateCreateInfo`.
+
+A framebuffer may contain multiple destination images (so-called color attachments) and Vulkan allows us to set individual color blending modes for each one. Therefore the create info is basically a collection of `PipelineColorBlendAttachmentState` structures:
+```cpp
+struct PipelineColorBlendStateCreateInfo
+{
+    ...
+    PipelineColorBlendStateCreateInfo& setAttachments( const container_t< const vk::PipelineColorBlendAttachmentState >& attachments_ );
+    ...
+}
+```
+This time we also don't get away with simply using a default constructed `PipelineColorBlendAttachmentState`. Instead we need to disable color blending explicitly but still instruct Vulkan which color channels we want to write:
+```cpp
+struct PipelineColorBlendAttachmentState
+{
+    ...
+    PipelineColorBlendAttachmentState& setBlendEnable( Bool32 blendEnable_ );
+    PipelineColorBlendAttachmentState& setColorWriteMask( ColorComponentFlags colorWriteMask_ );
+    ...
+};
+```
+
+So here's how we configure our color blend state:
+```cpp
+const auto colorBlendAttachment = vk::PipelineColorBlendAttachmentState{}
+    .setBlendEnable( false )
+    .setColorWriteMask(
+        vk::ColorComponentFlagBits::eR |
+        vk::ColorComponentFlagBits::eG |
+        vk::ColorComponentFlagBits::eB |
+        vk::ColorComponentFlagBits::eA );
+
+const auto colorBlendState = vk::PipelineColorBlendStateCreateInfo{}
+    .setAttachments( colorBlendAttachment );
+```
+
+Running this version you'll still get validation errors and a crash. The most telling one will be along the lines of:
+
+```
+VUID-VkGraphicsPipelineCreateInfo-layout-06602: If the pipeline requires pre-rasterization shader state [...] layout must be a valid VkPipelineLayout handle
+```
+
+This is because Vulkan requires a valid pipeline layout to be set on the `GraphicsPipelineCreateInfo`, even if our pipeline doesn't use any descriptor sets or push constants yet. We'll take care of that in the next lesson. Nevertheless we're slowly making progress and I want to stop it here for today. I know that this is annoying, after all it's the second lesson in a row after which our code doesn't really work. Please be patient my friends, we'll soon be over the hump and start to have real fun.
+
 ---
 
 [^1]: Perspective transformation is essentially the virtual camera with which you look at the scene and usually happens in the vertex shader. Mathematically speaking it transforms the coordinates of each vertex from the view space to a normalized space, i.e. the output coordinates are in the range -1...1 for x and y and 0...1 for z. We'll get into more details in a later session.
