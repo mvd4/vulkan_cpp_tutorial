@@ -111,6 +111,66 @@ const auto pipeline = vcpp::createGraphicsPipeline(
 
 Okay, we've completed the first step. If you run the program now and watch closely you will find that the first validation error has gone (the others and the exception are still there though). Looks like we're one step closer to a working pipeline, yay!
 
+## Vertex input and input assembly state
+One additional (temporary) advantage of defining the vertices in the shader is that we can pretty much ignore the `PipelineVertexInputStateCreateInfo` parameter because we don't pass in any vertices yet. Vulkan requires us to set this parameter though, so we'll have to give it the pointer to a default constructed instance.
+
+Next thing we want to set is the `pInputAssemblyState_`. As described last time, this stage essentially prepares the input for the vertex shader stage. It's a fixed stage and we actually cannot control that many parameters for it:
+```cpp
+struct PipelineInputAssemblyStateCreateInfo
+{
+    ...
+    PipelineInputAssemblyStateCreateInfo& setFlags( PipelineInputAssemblyStateCreateFlags flags_ );
+    PipelineInputAssemblyStateCreateInfo& setTopology( PrimitiveTopology topology_ );
+    PipelineInputAssemblyStateCreateInfo& setPrimitiveRestartEnable( Bool32 primitiveRestartEnable_ );
+    ...
+};
+```
+- The `flags_` are once more only reserved for future use.
+- The `topology_` defines how to combine the vertices to primitives, i.e. to geometric shapes to be drawn. The possible values include:
+  - `ePointList` if you want to draw single points
+  - `eTriangleList` if you want to draw individual triangles
+  - `eTriangleStrip` if you want to draw a series of triangles where every triangle shares two vertices with the previous one
+  - `eTriangleFan` if you want to draw a series of triangles that all share one vertex
+  - ... and several more
+- `primitiveRestartEnable_` is only relevant when doing indexed drawing, something we'll look into later. At this point we just ignore it.
+
+Since we are only drawing a single triangle for now, it doesn't really matter which of the `eTriangle...` topologies we set, `eTriangleList` seems like the most generic so let's just use that one.
+
+And with that our pipeline creation function looks like that now:
+```cpp
+auto createGraphicsPipeline(
+    const vk::Device& logicalDevice,
+    const vk::ShaderModule& vertexShader,
+    const vk::ShaderModule& fragmentShader
+) -> vk::UniquePipeline
+{
+    const auto shaderStageInfos = std::vector< vk::PipelineShaderStageCreateInfo >{
+        vk::PipelineShaderStageCreateInfo{}
+            .setStage( vk::ShaderStageFlagBits::eVertex )
+            .setPName( "main" )
+            .setModule( vertexShader ),
+        vk::PipelineShaderStageCreateInfo{}
+            .setStage( vk::ShaderStageFlagBits::eFragment )
+            .setPName( "main" )
+            .setModule( fragmentShader ),
+    };
+
+    const auto vertexInputState = vk::PipelineVertexInputStateCreateInfo{};
+    const auto inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{}
+        .setTopology( vk::PrimitiveTopology::eTriangleList );
+
+    const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
+        .setStages( shaderStageInfos )
+        .setPVertexInputState( &vertexInputState )
+        .setPInputAssemblyState( &inputAssemblyState );
+
+    return logicalDevice.createGraphicsPipelineUnique(
+        vk::PipelineCache{},
+        pipelineCreateInfo
+    ).value;
+}
+```
+If you compile and run this version, you'll still get validation warnings and the crash, which tells us that we're by far not done yet. Nevertheless I want to end here for today and continue next time.
 
 ---
 

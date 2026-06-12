@@ -125,11 +125,18 @@ namespace vcpp
             .setModule( fragmentShader ),
         };
 
+        const auto vertexInputState = vk::PipelineVertexInputStateCreateInfo{};
+        const auto inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{}
+            .setTopology( vk::PrimitiveTopology::eTriangleList );
+
         const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
-            .setStages( shaderStageInfos );
+            .setStages( shaderStageInfos )
+            .setPVertexInputState( &vertexInputState )
+            .setPInputAssemblyState( &inputAssemblyState );
 
         return logicalDevice.createGraphicsPipelineUnique(
             vk::PipelineCache{},
-            pipelineCreateInfo ).value;
+            pipelineCreateInfo
+        ).value;
     }
 }
