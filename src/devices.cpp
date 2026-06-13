@@ -232,7 +232,9 @@ namespace vcpp
         // extension name strings need to be static, because we're returning a vector with pointers to the underlying char arrays
         static const std::string compatibilityExtensionName = "VK_KHR_portability_subset";
 
-        auto result = std::vector< const char* >{};
+        auto result = std::vector< const char* >{
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
 
         const auto it = std::find_if(
             availableExtensions.begin(),
