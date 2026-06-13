@@ -21,6 +21,7 @@ License.
 #include "glfw_utils.hpp"
 #include "memory.hpp"
 #include "pipelines.hpp"
+#include "presentation.hpp"
 
 #include <iostream>
 #include <stdexcept>
@@ -30,6 +31,7 @@ auto main() -> int
 {
     constexpr int windowWidth = 800;
     constexpr int windowHeight = 600;
+    constexpr std::uint32_t swapchainImageCount = 2u;
 
     try
     {
@@ -56,13 +58,23 @@ auto main() -> int
 
         const auto pipelineLayout = vcpp::createGraphicsPipelineLayout( logicalDevice );
 
+        const auto swapchainExtent = vk::Extent2D{ windowWidth, windowHeight };
+
         const auto pipeline = vcpp::createGraphicsPipeline(
             logicalDevice,
             *pipelineLayout,
             *vertexShader,
             *fragmentShader,
             *renderPass,
-            vk::Extent2D{ windowWidth, windowHeight }
+            swapchainExtent
+        );
+
+        const auto swapchain = vcpp::createSwapchain(
+            logicalDevice,
+            *surface,
+            surfaceFormats[0],
+            swapchainExtent,
+            swapchainImageCount
         );
 
         while ( !glfwWindowShouldClose( window.get() ) )
