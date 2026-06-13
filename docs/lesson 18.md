@@ -73,9 +73,9 @@ Again a rather complex structure. Let's unpack:
 - the `surface_` parameter should be straightforward
 - `minImageCount_` sets the minimum number of swapchain images that the application wants to be able to use at the same time. Note that this is not necessarily the number of swapchain images that _will_ actually be created. Depending on internal factors and the selected presentation mode, Vulkan might actually create more[^4]
 - we already needed to specify the `imageFormat_` for our `AttachmentDescription` in the previous lesson, it's the same here
-- the `imageColorSpace_` defines how to interpret the color values for the individual channels. Depending on the used color space, the same numeric representation of a color may yield very different visual results. Therefore it is important to pay attention and not mix up color spaces between storage format, calculation and display. In our case we will want to use the color format that the surface uses for our swapchain.
+- the `imageColorSpace_` defines how to interpret the color values for the individual channels. Depending on the used color space, the same numeric representation of a color may yield very different visual results. Therefore it is important to pay attention and not mix up color spaces between storage format, calculation and display. In our case we will want to use the color space that the surface uses for our swapchain.
 - `imageExtent_` is the dimensions of our swapchain images. Note that the Vulkan specification requires this to match the surface's `currentExtent` (queryable via `PhysicalDevice::getSurfaceCapabilitiesKHR`) whenever that value is defined, which on platforms with HiDPI displays may differ from the GLFW window size in screen coordinates. For our tutorial we'll keep it simple and just pass in the window dimensions, but a production application should query the surface capabilities
-- `imageArrayLayers` refers to a Vulkan feature named 'array images' that lets you store multiple pictures of the same size in the same image object. For our purposes, this will always be 1
+- `imageArrayLayers_` refers to a Vulkan feature named 'array images' that lets you store multiple pictures of the same size in the same image object. For our purposes, this will always be 1
 - as its name suggests, `imageUsage_` defines how the swapchain images will be used (apart from presentation). There are multiple flags defined, but not all of them make sense in this context. We want to use the images as color attachments, so we'll pass `ImageUsageFlagBits::eColorAttachment`
 - `imageSharingMode_` defines whether the swapchain images will be shared between multiple queues. If that is the case, `queueFamilyIndices_` has to contain all queues that will access them. We already established that while theoretically the presentation queue could be different from the rendering queue we'll assume that it will be the same queue (see lesson 13). We'll therefore just use `vk::SharingMode::eExclusive` here
 - `setPreTransform` allows us to specify that a transformation (like e.g. a 90 degree clockwise rotation or horizontal flip) be applied to images in the swap chain.
@@ -117,13 +117,13 @@ auto createSwapchain(
     return logicalDevice.createSwapchainKHRUnique( createInfo );
 }
 ```
-We pass in everything related to the surface so that we're sure our swapchain is compatible with it. Additionally I decided to make the number of images required by the application a parameter because that one needs to be in sync with the requirements of our rendering function. We can now go on and create the swapchain:
+We pass in everything related to the surface so that we're sure our swapchain is compatible with it. Additionally I decided to make the number of images required by the application a parameter because that one needs to be in sync with the requirements of our rendering function. Keep in mind though that, as mentioned above, this is only a _minimum_ - the swapchain may end up containing more images than we requested. We'll therefore have to query the actual image count once we retrieve the images (which we'll do in the next lesson), rather than relying on this constant. We can now go on and create the swapchain:
 ```cpp
-int main()
+auto main() -> int
 {
     constexpr int windowWidth = 800;
     constexpr int windowHeight = 600;
-    constexpr std::uint32_t swapchainImageCount = 2u;
+    constexpr std::uint32_t minSwapchainImageCount = 2u;
 
     try
     {
@@ -143,7 +143,7 @@ int main()
             *surface,
             surfaceFormats[0],
             swapchainExtent,
-            swapchainImageCount );
+            minSwapchainImageCount );
         ...
     }
     ...

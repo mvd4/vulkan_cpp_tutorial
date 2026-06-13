@@ -21,6 +21,8 @@ License.
 
 #include <vulkan/vulkan.hpp>
 
+#include <cstdint>
+
 namespace vcpp
 {
     auto createSwapchain(

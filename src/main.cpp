@@ -31,7 +31,7 @@ auto main() -> int
 {
     constexpr int windowWidth = 800;
     constexpr int windowHeight = 600;
-    constexpr std::uint32_t swapchainImageCount = 2u;
+    constexpr std::uint32_t minSwapchainImageCount = 2u;
 
     try
     {
@@ -74,7 +74,7 @@ auto main() -> int
             *surface,
             surfaceFormats[0],
             swapchainExtent,
-            swapchainImageCount
+            minSwapchainImageCount
         );
 
         while ( !glfwWindowShouldClose( window.get() ) )
