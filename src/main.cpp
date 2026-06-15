@@ -31,7 +31,7 @@ auto main() -> int
 {
     constexpr int windowWidth = 800;
     constexpr int windowHeight = 600;
-    constexpr std::uint32_t minSwapchainImageCount = 2u;
+    constexpr std::uint32_t requestedSwapchainImageCount = 2u;
 
     try
     {
@@ -74,7 +74,7 @@ auto main() -> int
             *surface,
             surfaceFormats[0],
             swapchainExtent,
-            minSwapchainImageCount
+            requestedSwapchainImageCount
         );
 
         const auto imageViews = vcpp::createSwapchainImageViews(
@@ -88,6 +88,18 @@ auto main() -> int
             swapchainExtent,
             *renderPass
         );
+
+        const auto commandPool = logicalDevice.device->createCommandPoolUnique(
+            vk::CommandPoolCreateInfo{}
+                .setFlags( vk::CommandPoolCreateFlagBits::eResetCommandBuffer )
+                .setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
+        );
+
+        const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
+            .setCommandPool( *commandPool )
+            .setLevel( vk::CommandBufferLevel::ePrimary )
+            .setCommandBufferCount( requestedSwapchainImageCount );
+        const auto commandBuffers = logicalDevice.device->allocateCommandBuffers( commandBufferAllocateInfo );
 
         while ( !glfwWindowShouldClose( window.get() ) )
         {

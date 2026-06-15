@@ -10,6 +10,7 @@ target_sources( ${TARGET_NAME} PRIVATE glfw_utils.cpp  glfw_utils.hpp )
 target_sources( ${TARGET_NAME} PRIVATE memory.cpp  memory.hpp )
 target_sources( ${TARGET_NAME} PRIVATE pipelines.cpp  pipelines.hpp )
 target_sources( ${TARGET_NAME} PRIVATE presentation.cpp  presentation.hpp )
+target_sources( ${TARGET_NAME} PRIVATE rendering.cpp  rendering.hpp )
 
 target_compile_features( ${TARGET_NAME} PRIVATE cxx_std_20 )
 set_target_properties( ${TARGET_NAME} PROPERTIES
