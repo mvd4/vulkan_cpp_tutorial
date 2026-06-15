@@ -175,6 +175,114 @@ while ( !glfwWindowShouldClose( window.get() ) )
 
 And with that we're prepared for processing multiple framebuffers in parallel. To actually do that however we need to go back to the first validation error. As said, fixing it with `waitIdle` effectively limited the number of frames 'in flight' to one, so we're wasting performance here. We need to find a better solution.
 
+## Using Fences
+The problem that the validation errors informed us about was that we were trying to use a command buffer before the GPU was done with it. In a real-world application this will probably not be a very common problem, as the rendering will likely take more time and we'll rather have the opposite problem. But the command buffer is not the only resource for which we'll need to ensure that we're using it before it's ready. The same applies e.g. to the semaphores we have introduced since. So let's try to fix this issue.
+
+What we need to do is to make our application wait using resources until they become available again. So the host application needs to wait for the GPU, which means the right synchronization primitive for this use case is probably a fence. So let's create a one every command buffer in flight:
+
+```cpp
+...
+std::vector< vk::UniqueFence > inFlightFences;
+std::vector< vk::UniqueSemaphore > readyForRenderingSemaphores;
+std::vector< vk::UniqueSemaphore > readyForPresentingSemaphores;
+for( std::uint32_t i = 0; i < requestedSwapchainImageCount; ++i )
+{
+    inFlightFences.push_back( logicalDevice.device->createFenceUnique(
+        vk::FenceCreateInfo{}.setFlags( vk::FenceCreateFlagBits::eSignaled )
+    ) );
+    ...
+}
+...
+```
+
+`FenceCreateInfo` is almost as uninteresting as `SemaphoreCreateInfo`. Also for this one there's only the function `setFlags`. However, in contrast to the latter, there is one flag we can set: `eSignaled` will create a signaled fence instead of the unsignaled default. Since the fences we create here are supposed to block execution when the command buffers are not ready, we create them in the signaled state (because on first use all command buffers will be ready).
+
+Making the application wait for a fence to be signaled is achieved by the following function:
+
+```cpp
+class Device
+{
+    ...
+    Result waitForFences( const container_t< const Fence >& fences, Bool32 waitAll, uint64_t timeout, ... );
+    ...
+}
+```
+
+- the function takes a list of `fences` to wait for.
+- if `waitAll` is set to `true`, the function will block until all fences have been signaled, otherwise any fence becoming signaled will cause the function to return.
+- `timeout` is the number of nanoseconds the function is supposed to wait at max
+
+Putting that into practice our code looks like this now:
+
+```cpp
+...
+while ( !glfwWindowShouldClose( window.get() ) )
+{
+    glfwPollEvents();
+
+    auto result = logicalDevice.device->waitForFences(
+        *inFlightFences[ frameInFlightIndex ],
+        true,
+        std::numeric_limits< std::uint64_t >::max()
+    );
+    ...
+    result = queue.presentKHR( presentInfo );
+    ...
+}
+...
+```
+By waiting for the fence at the beginning of our render loop, we want to make sure that all the resources we used for that frame are already free again (see below).
+
+Unfortunately, running this version yields the original validation errors again because our fences never become unsignaled and so effectively we don't ever wait at all. At some point we need to reset them and then tell the GPU to signal them once the relevant resources become available again.
+
+The first part is easy: once we have waited, the fence has done its duty for this cycle and we can immediately reset it:
+
+```cpp
+...
+glfwPollEvents();
+
+auto result = logicalDevice.device->waitForFences(
+    *inFlightFences[ frameInFlightIndex ],
+    true,
+    std::numeric_limits< std::uint64_t >::max()
+);
+logicalDevice.device->resetFences( *inFlightFences[ frameInFlightIndex ] );
+
+auto imageIndex = logicalDevice.device->acquireNextImageKHR(
+...
+```
+But when do we signal it (or rather: when do we want the GPU to signal it)?
+
+Well, the validation error was complaining about the command buffer being re-used before the GPU was done with it. So we definitely do want to wait for the respective command buffer in use to be processed.
+
+Also, as said above, we have to protect our semaphores from premature re-use. Because host and GPU run asynchronously, without any synchronization we'd end up in a situation where
+- the host issues the commands for frame 0 to the GPU, using the semaphores w/ `frameInFlightIndex` = 0.
+- it then does the same for `frameInFlightIndex` = 1. So far, so good.
+- then, for the next frame, it would try `frameInFlightIndex` = 0 again. However, without any fences nothing in our program guarantees that the semaphores at that index are already available again.
+The `readyForPresentingSemaphores` are always used after the corresponding `readyForRenderingSemaphores`, so it's only the latter ones we need to look at here. We need to wait until the GPU is done with them before trying to re-use.
+
+So, how do we achieve that?
+
+Looking at our code, the last function that uses both, the `readyForRenderingSemaphores` and the command buffer, it the call to `queue.submit`. And if we look a bit closer at the signature of this function again, it actually has an optional second parameter that seems to fit our purpose:
+
+```cpp
+class Queue
+{
+    ...
+    void submit( const container_t< SubmitInfo >& submits, Fence fence, ... );
+    ...
+};
+```
+So we can pass a fence that will be signaled when all the submits have been completed by the queue. Which means that with
+```cpp
+...
+    queue.submit( submitInfo, *inFlightFences[ frameInFlightIndex ] );
+...
+```
+... the render loop will signal the fence when the queue is done with the command buffer and the corresponding `readyForRenderingSemaphore`. Exactly what we need, hooray!
+
+Compile and run this version, all should work as before and without any validation errors while running.
+
 ---
 
 [^1]: There's a third type of synchronization primitive: events. They are used in more advanced cases, so we're not going to talk about them here.

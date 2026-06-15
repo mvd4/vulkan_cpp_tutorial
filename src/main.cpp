@@ -105,10 +105,15 @@ auto main() -> int
             .setCommandBufferCount( requestedSwapchainImageCount );
         const auto commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
 
+        std::vector< vk::UniqueFence > inFlightFences;
         std::vector< vk::UniqueSemaphore > readyForRenderingSemaphores;
         std::vector< vk::UniqueSemaphore > readyForPresentingSemaphores;
         for( std::uint32_t i = 0; i < requestedSwapchainImageCount; ++i )
         {
+            inFlightFences.push_back( logicalDevice.device->createFenceUnique(
+                vk::FenceCreateInfo{}.setFlags( vk::FenceCreateFlagBits::eSignaled )
+            ) );
+
             readyForRenderingSemaphores.push_back( logicalDevice.device->createSemaphoreUnique(
                 vk::SemaphoreCreateInfo{}
             ) );
@@ -124,7 +129,12 @@ auto main() -> int
         {
             glfwPollEvents();
 
-            logicalDevice->waitIdle();
+            auto result = logicalDevice.device->waitForFences(
+                *inFlightFences[ frameInFlightIndex ],
+                true,
+                std::numeric_limits< std::uint64_t >::max()
+            );
+            logicalDevice.device->resetFences( *inFlightFences[ frameInFlightIndex ] );
 
             auto imageIndex = logicalDevice.device->acquireNextImageKHR(
                 *swapchain,
@@ -147,14 +157,15 @@ auto main() -> int
                 .setWaitSemaphores( *readyForRenderingSemaphores[ frameInFlightIndex ] )
                 .setSignalSemaphores( *readyForPresentingSemaphores[ frameInFlightIndex ] )
                 .setPWaitDstStageMask( waitStages );
-            queue.submit( submitInfo );
+
+            queue.submit( submitInfo, *inFlightFences[ frameInFlightIndex ] );
 
             const auto presentInfo = vk::PresentInfoKHR{}
                 .setSwapchains( *swapchain )
                 .setImageIndices( imageIndex )
                 .setWaitSemaphores( *readyForPresentingSemaphores[ frameInFlightIndex ] );
 
-            const auto result = queue.presentKHR( presentInfo );
+            result = queue.presentKHR( presentInfo );
             if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )
                 throw std::runtime_error( "presenting failed" );
 
