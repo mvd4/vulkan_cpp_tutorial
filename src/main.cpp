@@ -105,12 +105,18 @@ auto main() -> int
             .setCommandBufferCount( requestedSwapchainImageCount );
         const auto commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
 
-        auto readyForRenderingSemaphore = logicalDevice.device->createSemaphoreUnique(
-            vk::SemaphoreCreateInfo{}
-        );
-        auto readyForPresentingSemaphore = logicalDevice.device->createSemaphoreUnique(
-            vk::SemaphoreCreateInfo{}
-        );
+        std::vector< vk::UniqueSemaphore > readyForRenderingSemaphores;
+        std::vector< vk::UniqueSemaphore > readyForPresentingSemaphores;
+        for( std::uint32_t i = 0; i < requestedSwapchainImageCount; ++i )
+        {
+            readyForRenderingSemaphores.push_back( logicalDevice.device->createSemaphoreUnique(
+                vk::SemaphoreCreateInfo{}
+            ) );
+
+            readyForPresentingSemaphores.push_back( logicalDevice.device->createSemaphoreUnique(
+                vk::SemaphoreCreateInfo{}
+            ) );
+        }
         const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
         size_t frameInFlightIndex = 0;
@@ -120,10 +126,10 @@ auto main() -> int
 
             logicalDevice->waitIdle();
 
-            const auto imageIndex = logicalDevice->acquireNextImageKHR(
+            auto imageIndex = logicalDevice.device->acquireNextImageKHR(
                 *swapchain,
                 std::numeric_limits< std::uint64_t >::max(),
-                *readyForRenderingSemaphore
+                *readyForRenderingSemaphores[ frameInFlightIndex ]
             ).value;
 
             vcpp::recordCommandBuffer(
@@ -136,18 +142,17 @@ auto main() -> int
 
             const vk::PipelineStageFlags waitStages[] = {
                 vk::PipelineStageFlagBits::eColorAttachmentOutput };
-
             const auto submitInfo = vk::SubmitInfo{}
                 .setCommandBuffers( commandBuffers[ frameInFlightIndex ] )
-                .setWaitSemaphores( *readyForRenderingSemaphore )
-                .setSignalSemaphores( *readyForPresentingSemaphore )
+                .setWaitSemaphores( *readyForRenderingSemaphores[ frameInFlightIndex ] )
+                .setSignalSemaphores( *readyForPresentingSemaphores[ frameInFlightIndex ] )
                 .setPWaitDstStageMask( waitStages );
             queue.submit( submitInfo );
 
             const auto presentInfo = vk::PresentInfoKHR{}
                 .setSwapchains( *swapchain )
                 .setImageIndices( imageIndex )
-                .setWaitSemaphores( *readyForPresentingSemaphore );
+                .setWaitSemaphores( *readyForPresentingSemaphores[ frameInFlightIndex ] );
 
             const auto result = queue.presentKHR( presentInfo );
             if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )

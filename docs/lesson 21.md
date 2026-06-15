@@ -116,8 +116,64 @@ while ( !glfwWindowShouldClose( window.get() ) )
 }
 ...
 ```
-We create another semaphore[^2] just as before and add it to the `SubmitInfo` as semaphore to signal when the command buffer has completed. We also add it to the `PresentInfoKHR` as semaphore to wait for. That way presenting will not happen before the command buffer is done with the respective image. I've renamed the semaphore we already had to make the usage of both clearer.
+We create another semaphore[^2] just as before and add it to the `SubmitInfo` as semaphore to signal when the command buffer has completed. We also add it to the `PresentInfoKHR` as semaphore to wait for. That way presenting will not happen before the command buffer is done with the respective image. I've renamed the semaphore we already had to make the usage of both clearer. Compile and run this version, you should see no visual change and no validation errors while the application is running (yes, you'll see some when closing the app, we're going to take care of those eventually).
 
+Nice, so we have that one sorted out. However, there's still one problem we need to address. Remember, at the moment we are only ever processing one image at a time (because of the call to `waitIdle`). Having only one semaphore for each purpose is fine. However, we'd like to start rendering the next image already while the previous one is still being processed on the GPU. I we were to signal and wait on the same semaphores for different images in this case, things would get very messy.
+
+Luckily the fix is pretty straightforward: we simply use multiple semaphores instead. The naive approach would be to create one semaphore for each swapchain image. This has a problem though: we only learn about the index of the swapchain image we're going to use when we call `acquireNextImageKHR`. However, we'd already need that index to pass the correct semaphores to the functions, so we're in a chicken-egg situation here. But actually we don't need that many semaphores anyway: we still intend to limit the number of frames in flight, so we also only need that number of semaphores. Let's create and use them:
+
+```cpp
+...
+std::vector< vk::UniqueSemaphore > readyForRenderingSemaphores;
+std::vector< vk::UniqueSemaphore > readyForPresentingSemaphores;
+for( std::uint32_t i = 0; i < requestedSwapchainImageCount; ++i )
+{
+    readyForRenderingSemaphores.push_back( logicalDevice.device->createSemaphoreUnique(
+        vk::SemaphoreCreateInfo{}
+    ) );
+
+    readyForPresentingSemaphores.push_back( logicalDevice.device->createSemaphoreUnique(
+        vk::SemaphoreCreateInfo{}
+    ) );
+}
+const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
+
+size_t frameInFlightIndex = 0;
+while ( !glfwWindowShouldClose( window.get() ) )
+{
+    ...
+    auto imageIndex = logicalDevice.device->acquireNextImageKHR(
+        *swapchain,
+        std::numeric_limits< std::uint64_t >::max(),
+        *readyForRenderingSemaphores[ frameInFlightIndex ]
+    ).value;
+
+    vcpp::recordCommandBuffer(
+        commandBuffers[ frameInFlightIndex ],
+        *pipeline,
+        *renderPass,
+        *framebuffers[ imageIndex ],
+        swapchainExtent
+    );
+
+    const vk::PipelineStageFlags waitStages[] = {
+        vk::PipelineStageFlagBits::eColorAttachmentOutput };
+    const auto submitInfo = vk::SubmitInfo{}
+        .setCommandBuffers( commandBuffers[ frameInFlightIndex ] )
+        .setWaitSemaphores( *readyForRenderingSemaphores[ frameInFlightIndex ] )
+        .setSignalSemaphores( *readyForPresentingSemaphores[ frameInFlightIndex ] )
+        .setPWaitDstStageMask( waitStages );
+    queue.submit( submitInfo );
+
+    const auto presentInfo = vk::PresentInfoKHR{}
+        .setSwapchains( *swapchain )
+        .setImageIndices( imageIndex )
+        .setWaitSemaphores( *readyForPresentingSemaphores[ frameInFlightIndex ] );
+    ...
+}
+```
+
+And with that we're prepared for processing multiple framebuffers in parallel. To actually do that however we need to go back to the first validation error. As said, fixing it with `waitIdle` effectively limited the number of frames 'in flight' to one, so we're wasting performance here. We need to find a better solution.
 
 ---
 
