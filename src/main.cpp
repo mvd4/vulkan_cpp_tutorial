@@ -105,7 +105,12 @@ auto main() -> int
             .setCommandBufferCount( requestedSwapchainImageCount );
         const auto commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
 
-        const auto semaphore = logicalDevice->createSemaphoreUnique( vk::SemaphoreCreateInfo{} );
+        auto readyForRenderingSemaphore = logicalDevice.device->createSemaphoreUnique(
+            vk::SemaphoreCreateInfo{}
+        );
+        auto readyForPresentingSemaphore = logicalDevice.device->createSemaphoreUnique(
+            vk::SemaphoreCreateInfo{}
+        );
         const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
         size_t frameInFlightIndex = 0;
@@ -118,7 +123,7 @@ auto main() -> int
             const auto imageIndex = logicalDevice->acquireNextImageKHR(
                 *swapchain,
                 std::numeric_limits< std::uint64_t >::max(),
-                *semaphore
+                *readyForRenderingSemaphore
             ).value;
 
             vcpp::recordCommandBuffer(
@@ -129,13 +134,21 @@ auto main() -> int
                 swapchainExtent
             );
 
+            const vk::PipelineStageFlags waitStages[] = {
+                vk::PipelineStageFlagBits::eColorAttachmentOutput };
+
             const auto submitInfo = vk::SubmitInfo{}
-                .setCommandBuffers( commandBuffers[ frameInFlightIndex ] );
+                .setCommandBuffers( commandBuffers[ frameInFlightIndex ] )
+                .setWaitSemaphores( *readyForRenderingSemaphore )
+                .setSignalSemaphores( *readyForPresentingSemaphore )
+                .setPWaitDstStageMask( waitStages );
             queue.submit( submitInfo );
 
             const auto presentInfo = vk::PresentInfoKHR{}
                 .setSwapchains( *swapchain )
-                .setImageIndices( imageIndex );
+                .setImageIndices( imageIndex )
+                .setWaitSemaphores( *readyForPresentingSemaphore );
+
             const auto result = queue.presentKHR( presentInfo );
             if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )
                 throw std::runtime_error( "presenting failed" );
