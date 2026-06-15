@@ -113,6 +113,8 @@ auto main() -> int
         {
             glfwPollEvents();
 
+            logicalDevice->waitIdle();
+
             const auto imageIndex = logicalDevice->acquireNextImageKHR(
                 *swapchain,
                 std::numeric_limits< std::uint64_t >::max(),
