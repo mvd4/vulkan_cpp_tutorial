@@ -19,6 +19,34 @@ License.
 
 #include "presentation.hpp"
 
+
+namespace {
+
+    auto createImageView(
+        const vk::Device& logicalDevice,
+        const vk::Image& image,
+        const vk::Format& format
+    ) -> vk::UniqueImageView
+    {
+        const auto subresourceRange = vk::ImageSubresourceRange{}
+            .setAspectMask( vk::ImageAspectFlagBits::eColor )
+            .setBaseMipLevel( 0 )
+            .setLevelCount( 1 )
+            .setBaseArrayLayer( 0 )
+            .setLayerCount( 1 );
+
+        const auto createInfo = vk::ImageViewCreateInfo{}
+            .setImage( image )
+            .setViewType( vk::ImageViewType::e2D )
+            .setFormat( format )
+            .setSubresourceRange( subresourceRange );
+
+        return logicalDevice.createImageViewUnique( createInfo );
+    }
+
+}
+
+
 namespace vcpp
 {
 
@@ -46,4 +74,48 @@ namespace vcpp
 
         return logicalDevice.createSwapchainKHRUnique( createInfo );
     }
+
+    auto createSwapchainImageViews(
+        const vk::Device& logicalDevice,
+        const vk::SwapchainKHR& swapchain,
+        const vk::Format& imageFormat
+    ) -> std::vector< vk::UniqueImageView >
+    {
+        const auto swapchainImages = logicalDevice.getSwapchainImagesKHR( swapchain );
+
+        std::vector< vk::UniqueImageView > swapchainImageViews;
+        for( const auto& img : swapchainImages )
+        {
+            swapchainImageViews.push_back(
+                createImageView( logicalDevice, img, imageFormat )
+            );
+        }
+
+        return swapchainImageViews;
+    }
+
+    auto createFramebuffers(
+        const vk::Device& logicalDevice,
+        const std::vector< vk::UniqueImageView >& imageViews,
+        const vk::Extent2D& imageExtent,
+        const vk::RenderPass& renderPass
+    ) -> std::vector< vk::UniqueFramebuffer >
+    {
+        std::vector< vk::UniqueFramebuffer > result;
+        for( const auto& view : imageViews )
+        {
+            const std::array< vk::ImageView, 1 > attachments = { *view };
+            const auto frameBufferCreateInfo = vk::FramebufferCreateInfo{}
+                .setRenderPass( renderPass )
+                .setAttachments( attachments )
+                .setWidth( imageExtent.width )
+                .setHeight( imageExtent.height )
+                .setLayers( 1 );
+
+            result.push_back( logicalDevice.createFramebufferUnique( frameBufferCreateInfo ) );
+        }
+
+        return result;
+    }
+
 } // namespace vcpp

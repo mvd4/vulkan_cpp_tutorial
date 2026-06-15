@@ -32,4 +32,17 @@ namespace vcpp
         const vk::Extent2D& surfaceExtent,
         std::uint32_t minSwapchainImageCount
     ) -> vk::UniqueSwapchainKHR;
+
+    auto createSwapchainImageViews(
+        const vk::Device& logicalDevice,
+        const vk::SwapchainKHR& swapchain,
+        const vk::Format& imageFormat
+    ) -> std::vector< vk::UniqueImageView >;
+
+    auto createFramebuffers(
+        const vk::Device& logicalDevice,
+        const std::vector< vk::UniqueImageView >& imageViews,
+        const vk::Extent2D& imageExtent,
+        const vk::RenderPass& renderPass
+    ) -> std::vector< vk::UniqueFramebuffer >;
 }

@@ -77,6 +77,18 @@ auto main() -> int
             minSwapchainImageCount
         );
 
+        const auto imageViews = vcpp::createSwapchainImageViews(
+            logicalDevice,
+            *swapchain,
+            surfaceFormats[0].format );
+
+        const auto framebuffers = vcpp::createFramebuffers(
+            logicalDevice,
+            imageViews,
+            swapchainExtent,
+            *renderPass
+        );
+
         while ( !glfwWindowShouldClose( window.get() ) )
         {
             glfwPollEvents();
