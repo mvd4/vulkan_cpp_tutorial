@@ -124,8 +124,158 @@ void recordCommandBuffer(
 }
 ```
 
+## Completing the Render Loop
+So we've got our recording function ready. If we now want to call it, we need to give it one command buffer and one framebuffer. That means that we need the appropriate indices into our respective arrays. Those indices will probably be different as we only have one command buffer for each swapchain image we requested, but we have one framebuffer for each image that the swapchain actually created.
+
+Let's start with the command buffer index. This one is pretty straightforward: we simply count the index up and wrap around when we reach the number of images we requested (which is equal to the maximum number of images we want to have in use at the same time).
+```cpp
+size_t frameInFlightIndex = 0;
+while ( !glfwWindowShouldClose( window.get() ) )
+{
+    glfwPollEvents();
+
+    frameInFlightIndex = ( frameInFlightIndex + 1 ) % requestedSwapchainImageCount;
+}
+```
+I called the counter `frameInFlightIndex` because I tend to prefer names that describe what the variables actually represent rather than what I choose to use them for.
+
+Now to the framebuffer index. Here we need to know which swapchain image we're about to use, and that's something we don't have direct control over. So we need to ask the swapchain. We also should probably inform the swapchain that we're about to start using that image. Both tasks can be accomplished with a single call:
+```cpp
+class Device
+{
+    ...
+    uint32_t acquireNextImageKHR(
+        SwapchainKHR swapchain,
+        uint64_t timeout,
+        Semaphore semaphore,
+        Fence fence,
+        ...
+    ) const;
+    ...
+};
+```
+- `swapchain` is straightforward
+- `timeout` is the time (in nanoseconds) the function should wait if there is no image available immediately. If the timeout is exceeded without an image being available, the function will throw an exception of `Result::eNotReady`
+- I've mentioned semaphores briefly in lesson 11 but did not really explain them. I haven't talked about fences at all yet. And for once I will keep it that way and not go into explaining the concepts in detail just yet. Suffice it to say that we have to pass a valid object for at least one of the parameters to the function. We'll go for the `semaphore`, the `fence` parameter has a default value and so we can ignore that one for now.
+
+A small note on the return type: although the signature above advertises `uint32_t`, the C++ wrapper actually hands us a `ResultValue< uint32_t >`. The reason is that `acquireNextImageKHR` can return non-error success codes such as `eSuboptimalKHR` which the wrapper does not turn into exceptions. We just want the index right now, so we read it via `.value`.
+
+Creating a semaphore is straightforward:
+```cpp
+class Device
+{
+    ...
+    UniqueSemaphore createSemaphoreUnique( const SemaphoreCreateInfo& createInfo, ... ) const;
+    ...
+};
+```
+And in our case here we can just use a default-constructed create info.
+
+Now we have all we need to call our `recordCommandBuffer` function. Let's extend the render loop accordingly:
+```cpp
+...
+const auto semaphore = logicalDevice.device->createSemaphoreUnique( vk::SemaphoreCreateInfo{} );
+
+size_t frameInFlightIndex = 0;
+while ( !glfwWindowShouldClose( window.get() ) )
+{
+    glfwPollEvents();
+
+    const auto imageIndex = logicalDevice.device->acquireNextImageKHR(
+        *swapchain,
+        std::numeric_limits< std::uint64_t >::max(),
+        *semaphore
+    ).value;
+
+    vcpp::recordCommandBuffer(
+        commandBuffers[ frameInFlightIndex ],
+        *pipeline,
+        *renderPass,
+        *framebuffers[ imageIndex ],
+        swapchainExtent
+    );
+
+    frameInFlightIndex = ( frameInFlightIndex + 1 ) % requestedSwapchainImageCount;
+}
+...
+```
+Running this version will yield an exception related to the semaphore almost immediately. We'll take care of this eventually, for now let's continue.
+
+At this point we're recording the command buffer for each new frame[^4], but we're not actually sending any of them off to the queue to be executed. That's easy to change though, we already learned how to obtain a queue and submit command buffers to it back in lesson 11:
+
+```cpp
+...
+const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
+
+while ( !glfwWindowShouldClose( window.get() ) )
+{
+    ...
+    const auto submitInfo = vk::SubmitInfo{}
+        .setCommandBuffers( commandBuffers[ frameInFlightIndex ] );
+    queue.submit( submitInfo );
+
+    frameInFlightIndex = ( frameInFlightIndex + 1 ) % requestedSwapchainImageCount;
+}
+...
+```
+This still doesn't change much though, we're still not seeing anything and get an exception almost immediately. We're apparently still missing something.
+
+Have a look at Fig 3. back in lesson 18. The basic principle of how to work with a swapchain is to acquire an image, render to that image and then sending it off to be presented. We've now implemented the first two of those steps, but we're not yet scheduling the images for presentation. The function we need to do that is this one:
+```cpp
+class Queue
+{
+    ...
+    Result Queue::presentKHR( const PresentInfoKHR & presentInfo, ... ) const;
+    ...
+};
+```
+with
+```cpp
+struct PresentInfoKHR
+{
+    ...
+    PresentInfoKHR& setWaitSemaphores( const container_t< const Semaphore >& waitSemaphores_ );
+    PresentInfoKHR& setSwapchains( const container_t< const SwapchainKHR >& swapchains_ );
+    PresentInfoKHR& setImageIndices( const container_t< const uint32_t >& imageIndices_ );
+    PresentInfoKHR& setResults( const container_t< Result >& results_ );
+    ...
+};
+```
+- `waitSemaphores_` optionally specifies one or more semaphores that Vulkan should wait for before presenting. Again, more on semaphores and synchronization in general in a later lesson. For now we ignore that parameter.
+- Vulkan can actually present to multiple swapchains at the same time with one single call to `presentKHR`. This is why the present info takes a container of `swapchains_`.
+- for the same reason you can specify multiple `imageIndices_` to be presented. The container needs to be of the same size as the one for the swapchains. Each image index refers to the respective swapchain image.
+- because each individual presentation request can produce a different result you can optionally set the `results_` container as an out parameter that will retrieve the respective result of the presentation request.
+
+So let's enhance our render loop accordingly. We only have one swapchain and one image to present in each cycle. The image index is the one we retrieved from our call to `acquireNextImageKHR` and we're going to ignore the individual results for now[^5]:
+```cpp
+while ( !glfwWindowShouldClose( window.get() ) )
+{
+    ...
+    queue.submit( submitInfo );
+
+    const auto presentInfo = vk::PresentInfoKHR{}
+        .setSwapchains( *swapchain )
+        .setImageIndices( imageIndex );
+    const auto result = queue.presentKHR( presentInfo );
+    if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )
+        throw std::runtime_error( "presenting failed" );
+
+    frameInFlightIndex = ( frameInFlightIndex + 1 ) % requestedSwapchainImageCount;
+}
+```
+Et voilà, if you run this version you should finally see a red triangle being rendered on top of a blue background. Time to celebrate!
+
+![Screenshot showing the rendering of our red triangle on a dark blue background](images/Screenshot_1_Basic_Triangle.png "Fig. 1: Our first Vulkan rendering")
+
+Yes, there is a continuous stream of validation errors, and if you play around with your application window you'll probably notice quite a few more shortcomings. We'll address those in the next lesson.
+
+But still: congratulations and thank you for your perseverance. You've made it through the most tedious part of working with Vulkan. I promise, from now on it's going to be much more fun because we'll get a noticeable improvement of our rendering pipeline in almost every lesson.
+
+
 ---
 
 [^1]: The alternative would be to create a new command buffer for every single frame, which would be terribly inefficient
 [^2]: We requested two swapchain images because we only ever want two frames to actually be 'in flight'. I.e. once we're done rendering the second image we want to wait if necessary until the first has finished presenting and only then start rendering the next frame. So we also only need that number of command buffers and not one for every swapchain image.
 [^3]: This would produce the same visible effect as using the respective scissor (see lesson 16)
+[^4]: Since our current scene never changes, re-recording the command buffers is strictly speaking unnecessary overhead. We could also have pre-recorded one command buffer for each framebuffer and then just use those. However, ultimately we want our pipeline to be able to render dynamic scenes, so I decided to prepare the render loop for that already now.
+[^5]: We're not ignoring the return value of `presentKHR` here because that one is marked as `[nodiscard]` and we don't want to see compiler warnings. Checking for `eSuboptimalKHR` is necessary in a number of situations: on high-resolution systems such as Apple computers with Retina displays the actual image size differs from the logical window size, and on any platform the swapchain becomes suboptimal as soon as the user resizes the window. It's okay for now, we'll fix this issue properly soon.

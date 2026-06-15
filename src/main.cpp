@@ -22,6 +22,7 @@ License.
 #include "memory.hpp"
 #include "pipelines.hpp"
 #include "presentation.hpp"
+#include "rendering.hpp"
 
 #include <iostream>
 #include <stdexcept>
@@ -101,9 +102,40 @@ auto main() -> int
             .setCommandBufferCount( requestedSwapchainImageCount );
         const auto commandBuffers = logicalDevice.device->allocateCommandBuffers( commandBufferAllocateInfo );
 
+        const auto semaphore = logicalDevice.device->createSemaphoreUnique( vk::SemaphoreCreateInfo{} );
+        const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
+
+        size_t frameInFlightIndex = 0;
         while ( !glfwWindowShouldClose( window.get() ) )
         {
             glfwPollEvents();
+
+            const auto imageIndex = logicalDevice.device->acquireNextImageKHR(
+                *swapchain,
+                std::numeric_limits< std::uint64_t >::max(),
+                *semaphore
+            ).value;
+
+            vcpp::recordCommandBuffer(
+                commandBuffers[ frameInFlightIndex ],
+                *pipeline,
+                *renderPass,
+                *framebuffers[ imageIndex ],
+                swapchainExtent
+            );
+
+            const auto submitInfo = vk::SubmitInfo{}
+                .setCommandBuffers( commandBuffers[ frameInFlightIndex ] );
+            queue.submit( submitInfo );
+
+            const auto presentInfo = vk::PresentInfoKHR{}
+                .setSwapchains( *swapchain )
+                .setImageIndices( imageIndex );
+            const auto result = queue.presentKHR( presentInfo );
+            if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )
+                throw std::runtime_error( "presenting failed" );
+
+            frameInFlightIndex = ( frameInFlightIndex + 1 ) % requestedSwapchainImageCount;
         }
     }
     catch( const std::exception& e )
