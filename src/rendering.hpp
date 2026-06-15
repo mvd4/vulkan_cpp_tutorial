@@ -28,7 +28,7 @@ namespace vcpp
         const vk::CommandBuffer& commandBuffer,
         const vk::Pipeline& pipeline,
         const vk::RenderPass& renderPass,
-        const vk::Framebuffer& frameBuffer,
+        const vk::Framebuffer& framebuffer,
         const vk::Extent2D& renderExtent
     ) -> void;
 }

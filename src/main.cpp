@@ -24,7 +24,10 @@ License.
 #include "presentation.hpp"
 #include "rendering.hpp"
 
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 
 
@@ -90,7 +93,7 @@ auto main() -> int
             *renderPass
         );
 
-        const auto commandPool = logicalDevice.device->createCommandPoolUnique(
+        const auto commandPool = logicalDevice->createCommandPoolUnique(
             vk::CommandPoolCreateInfo{}
                 .setFlags( vk::CommandPoolCreateFlagBits::eResetCommandBuffer )
                 .setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
@@ -100,17 +103,17 @@ auto main() -> int
             .setCommandPool( *commandPool )
             .setLevel( vk::CommandBufferLevel::ePrimary )
             .setCommandBufferCount( requestedSwapchainImageCount );
-        const auto commandBuffers = logicalDevice.device->allocateCommandBuffers( commandBufferAllocateInfo );
+        const auto commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
 
-        const auto semaphore = logicalDevice.device->createSemaphoreUnique( vk::SemaphoreCreateInfo{} );
-        const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
+        const auto semaphore = logicalDevice->createSemaphoreUnique( vk::SemaphoreCreateInfo{} );
+        const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
         size_t frameInFlightIndex = 0;
         while ( !glfwWindowShouldClose( window.get() ) )
         {
             glfwPollEvents();
 
-            const auto imageIndex = logicalDevice.device->acquireNextImageKHR(
+            const auto imageIndex = logicalDevice->acquireNextImageKHR(
                 *swapchain,
                 std::numeric_limits< std::uint64_t >::max(),
                 *semaphore

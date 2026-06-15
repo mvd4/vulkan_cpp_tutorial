@@ -28,7 +28,7 @@ namespace vcpp
         const vk::CommandBuffer& commandBuffer,
         const vk::Pipeline& pipeline,
         const vk::RenderPass& renderPass,
-        const vk::Framebuffer& frameBuffer,
+        const vk::Framebuffer& framebuffer,
         const vk::Extent2D& renderExtent
     ) -> void
     {
@@ -38,7 +38,7 @@ namespace vcpp
 
         const auto renderPassBeginInfo = vk::RenderPassBeginInfo{}
             .setRenderPass( renderPass )
-            .setFramebuffer( frameBuffer )
+            .setFramebuffer( framebuffer )
             .setRenderArea( vk::Rect2D{ vk::Offset2D{ 0, 0 }, renderExtent } )
             .setClearValues( clearValues );
 

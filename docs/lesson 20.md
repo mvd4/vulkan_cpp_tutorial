@@ -3,7 +3,7 @@ The time has finally come: today we're going to see the triangle being rendered 
 
 The one thing that we're still missing for it all to work is to execute our pipeline on the GPU. Looking back at lesson 10, we already know that in order to make the GPU do anything we need to record instructions into command buffers. Those buffers need to be allocated from a command pool. So let's start by creating the pool (remember, we didn't keep that code around because it's only a single function call).
 ```cpp
-const auto commandPool = logicalDevice.device->createCommandPoolUnique(
+const auto commandPool = logicalDevice->createCommandPoolUnique(
     vk::CommandPoolCreateInfo{}
         .setFlags( vk::CommandPoolCreateFlagBits::eResetCommandBuffer )
         .setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
@@ -17,16 +17,16 @@ const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
     .setCommandPool( *commandPool )
     .setLevel( vk::CommandBufferLevel::ePrimary )
     .setCommandBufferCount( requestedSwapchainImageCount );
-const auto commandBuffers = logicalDevice.device->allocateCommandBuffers( commandBufferAllocateInfo );
+const auto commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
 ```
 
 ## Recording the command buffers
 Now that we have the command buffers, let's create a stub to record into them in a new sourcecode file pair `rendering.cpp` / `rendering.hpp` (don't forget to add those to your `CMakeLists.txt`):
 ```cpp
-void recordCommandBuffer(
+auto recordCommandBuffer(
     const vk::CommandBuffer& commandBuffer,
     const vk::Pipeline& pipeline
-)
+) -> void
 {
     commandBuffer.begin( vk::CommandBufferBeginInfo{} );
     commandBuffer.bindPipeline( vk::PipelineBindPoint::eGraphics, pipeline );
@@ -66,13 +66,13 @@ struct RenderPassBeginInfo
 
 So we can extend our recording function as follows:
 ```cpp
-void recordCommandBuffer(
+auto recordCommandBuffer(
     const vk::CommandBuffer& commandBuffer,
     const vk::Pipeline& pipeline,
     const vk::RenderPass& renderPass,
-    const vk::Framebuffer& frameBuffer,
+    const vk::Framebuffer& framebuffer,
     const vk::Extent2D& renderExtent
-)
+) -> void
 {
     const auto clearValues = std::array< vk::ClearValue, 1 >{
         vk::ClearValue{}.setColor( std::array< float, 4 >{ { 0.f, 0.f, .5f, 1.f } } )
@@ -80,7 +80,7 @@ void recordCommandBuffer(
 
     const auto renderPassBeginInfo = vk::RenderPassBeginInfo{}
         .setRenderPass( renderPass )
-        .setFramebuffer( frameBuffer )
+        .setFramebuffer( framebuffer )
         .setRenderArea( vk::Rect2D{ vk::Offset2D{ 0, 0 }, renderExtent } )
         .setClearValues( clearValues );
 
@@ -107,13 +107,13 @@ class CommandBuffer
 ```
 Since we specified three vertices in our shader we probably should ask Vulkan to also draw three vertices, starting with the very first one. Instanced drawing is a topic we'll cover in a later lesson, for now we just want to draw one instance starting at index 0. That means we can complete our recording function like so:
 ```cpp
-void recordCommandBuffer(
+auto recordCommandBuffer(
     const vk::CommandBuffer& commandBuffer,
     const vk::Pipeline& pipeline,
     const vk::RenderPass& renderPass,
-    const vk::Framebuffer& frameBuffer,
+    const vk::Framebuffer& framebuffer,
     const vk::Extent2D& renderExtent
-)
+) -> void
 {
     ...
     commandBuffer.beginRenderPass( renderPassBeginInfo, vk::SubpassContents::eInline );
@@ -155,7 +155,7 @@ class Device
 };
 ```
 - `swapchain` is straightforward
-- `timeout` is the time (in nanoseconds) the function should wait if there is no image available immediately. If the timeout is exceeded without an image being available, the function will throw an exception of `Result::eNotReady`
+- `timeout` is the time (in nanoseconds) the function should wait if there is no image available immediately. If a non-zero timeout elapses without an image becoming available, the call returns `Result::eTimeout`, for a `timeout` of `0` it returns `Result::eNotReady` if no image is available. Both of these are not considered errors, so the C++ wrapper does *not* throw for them but hands them back in the `ResultValue`.
 - I've mentioned semaphores briefly in lesson 11 but did not really explain them. I haven't talked about fences at all yet. And for once I will keep it that way and not go into explaining the concepts in detail just yet. Suffice it to say that we have to pass a valid object for at least one of the parameters to the function. We'll go for the `semaphore`, the `fence` parameter has a default value and so we can ignore that one for now.
 
 A small note on the return type: although the signature above advertises `uint32_t`, the C++ wrapper actually hands us a `ResultValue< uint32_t >`. The reason is that `acquireNextImageKHR` can return non-error success codes such as `eSuboptimalKHR` which the wrapper does not turn into exceptions. We just want the index right now, so we read it via `.value`.
@@ -174,14 +174,14 @@ And in our case here we can just use a default-constructed create info.
 Now we have all we need to call our `recordCommandBuffer` function. Let's extend the render loop accordingly:
 ```cpp
 ...
-const auto semaphore = logicalDevice.device->createSemaphoreUnique( vk::SemaphoreCreateInfo{} );
+const auto semaphore = logicalDevice->createSemaphoreUnique( vk::SemaphoreCreateInfo{} );
 
 size_t frameInFlightIndex = 0;
 while ( !glfwWindowShouldClose( window.get() ) )
 {
     glfwPollEvents();
 
-    const auto imageIndex = logicalDevice.device->acquireNextImageKHR(
+    const auto imageIndex = logicalDevice->acquireNextImageKHR(
         *swapchain,
         std::numeric_limits< std::uint64_t >::max(),
         *semaphore
@@ -205,7 +205,7 @@ At this point we're recording the command buffer for each new frame[^4], but we'
 
 ```cpp
 ...
-const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
+const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
 while ( !glfwWindowShouldClose( window.get() ) )
 {
@@ -275,7 +275,7 @@ But still: congratulations and thank you for your perseverance. You've made it t
 ---
 
 [^1]: The alternative would be to create a new command buffer for every single frame, which would be terribly inefficient
-[^2]: We requested two swapchain images because we only ever want two frames to actually be 'in flight'. I.e. once we're done rendering the second image we want to wait if necessary until the first has finished presenting and only then start rendering the next frame. So we also only need that number of command buffers and not one for every swapchain image.
+[^2]: Strictly speaking these are two distinct concepts: the requested swapchain image count governs how many images are available for presentation, whereas the number of 'frames in flight' governs how much CPU/GPU work we allow to overlap. To keep things simple for now we deliberately reuse the same number for both: we requested two swapchain images and we also only ever want two frames to actually be 'in flight'. I.e. once we're done rendering the second image we want to wait if necessary until the first has finished presenting and only then start rendering the next frame. So we also only need that number of command buffers and not one for every swapchain image.
 [^3]: This would produce the same visible effect as using the respective scissor (see lesson 16)
 [^4]: Since our current scene never changes, re-recording the command buffers is strictly speaking unnecessary overhead. We could also have pre-recorded one command buffer for each framebuffer and then just use those. However, ultimately we want our pipeline to be able to render dynamic scenes, so I decided to prepare the render loop for that already now.
 [^5]: We're not ignoring the return value of `presentKHR` here because that one is marked as `[nodiscard]` and we don't want to see compiler warnings. Checking for `eSuboptimalKHR` is necessary in a number of situations: on high-resolution systems such as Apple computers with Retina displays the actual image size differs from the logical window size, and on any platform the swapchain becomes suboptimal as soon as the user resizes the window. It's okay for now, we'll fix this issue properly soon.
