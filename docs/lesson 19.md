@@ -137,7 +137,7 @@ auto createSwapchainImageViews(
     return swapchainImageViews;
 }
 ```
-Note that by querying the images from the swapchain and iterating over them, we automatically get an image view for every image in the swapchain. The number of images / image views will likely be different from our constant `swapchainImageCount` because it also includes the images that the swapchain needs internally. To make this more explicit and avoid mistakes in the future I've therefore renamed the constant to `requestedSwapchainImageCount`.
+Note that by querying the images from the swapchain and iterating over them, we automatically get an image view for every image in the swapchain. As we already saw in the previous lesson, this count may well be larger than the `minSwapchainImageCount` we requested, which is exactly why we query the actual images here instead of relying on that constant.
 
 With those image views we can finally create our framebuffers:
 ```cpp
@@ -152,14 +152,14 @@ auto createFramebuffers(
     for( const auto& view : imageViews )
     {
         const std::array< vk::ImageView, 1 > attachments = { *view };
-        const auto frameBufferCreateInfo = vk::FramebufferCreateInfo{}
+        const auto framebufferCreateInfo = vk::FramebufferCreateInfo{}
             .setRenderPass( renderPass )
             .setAttachments( attachments )
             .setWidth( imageExtent.width )
             .setHeight( imageExtent.height )
             .setLayers( 1 );
 
-        result.push_back( logicalDevice.createFramebufferUnique( frameBufferCreateInfo ) );
+        result.push_back( logicalDevice.createFramebufferUnique( framebufferCreateInfo ) );
     }
 
     return result;

@@ -105,14 +105,14 @@ namespace vcpp
         for( const auto& view : imageViews )
         {
             const std::array< vk::ImageView, 1 > attachments = { *view };
-            const auto frameBufferCreateInfo = vk::FramebufferCreateInfo{}
+            const auto framebufferCreateInfo = vk::FramebufferCreateInfo{}
                 .setRenderPass( renderPass )
                 .setAttachments( attachments )
                 .setWidth( imageExtent.width )
                 .setHeight( imageExtent.height )
                 .setLayers( 1 );
 
-            result.push_back( logicalDevice.createFramebufferUnique( frameBufferCreateInfo ) );
+            result.push_back( logicalDevice.createFramebufferUnique( framebufferCreateInfo ) );
         }
 
         return result;
