@@ -283,6 +283,29 @@ So we can pass a fence that will be signaled when all the submits have been comp
 
 Compile and run this version, all should work as before and without any validation errors while running.
 
+Phew! This has been a lot and it's easy to get lost in all that synchronization, so let's quickly recap how our rendering loop is synchronized now by looking at an example (for simplicity's sake, I'm assuming that the actual number of swapchain images equals `requestedSwapchainImageCount`):
+
+![Visualization showing the flow of function calls, the state of the semaphores and fences and the checks and signals in our render loop.](images/Synchronization 2.png "Fig. 2: Example of synchronization in our rendering loop")
+
+- We start with `frameInFlightIndex=0`.
+- The first call in our rendering loop is `waitForFences`. Since we created the fences in a signaled state, this doesn't wait but immediately proceeds to the `resetFences`, which resets the `inFlightFences[0]` to an unsignaled state.
+- next, we call `acquireNextImageKHR` with `readyForRenderingSemaphores[0]`, which has been created in a unsignaled state. We didn't use any of the swapchain images yet, so the call immediately signals the semaphore and returns index 0
+- next we record the command buffers. As said above, recording in itself is safe because we're not actually accessing any of the resources. We only use references to the command- and framebuffers here.
+- then we `submit` the command buffer. Because we pass `readyForRenderingSemaphores[0]` as the wait semaphore, the call would wait until that is being signaled. This has already happened, so it is reset and the commands in `commandBuffers[0]` start executing right away.
+- importantly, execution of the main program doesn't stop to wait for the command buffer to be processed, instead it moves on directly to the call to `presentKHR`. However, since we pass `readyForPresentingSemaphores[0]` as a wait semaphore here, and that one is not yet signalled, nothing happens just now. The call returns and the main program can continue execution.
+- this whole sequence repeats for `frameInFlightIndex=1`
+- and now it gets interesting: `frameInFlightIndex` wraps around to 0, but `commandBuffer[0]` is still being executed. Which means that also the semaphores and `framebuffer` for index 0 are still in use. If we didn't have synchronization, we'd run into exactly the error we've seen at the beginning of this lesson. We do have the fences now though, and because `inFlightFences[0]` isn't signalled yet, program execution of `main()` halts at `waitForFences`.
+- eventually, the GPU finishes executing `commandBuffers[0]` and signals both,  `readyForPresentingSemaphores[0]` and `inFlightFences[0]`
+- signalling `readyForPresentingSemaphore[0]` unlocks the previously blocked call to `presentKHR` for swapchain image 0, so that frame is now being presented while the semaphore is being reset
+- signalling `inFlightFences[0]` also unlocks the blocked `waitForFences` call and the main program resumes execution. Note that because the fence was singalled when the command buffer execution was completed, that implicitly also signalled the availability of the respective framebuffer and rendering semaphore, so re-using them is fine from now on. First we reset the fence though.
+- then we call `acquireNextImageKHR` with `readyForRenderingSemaphores[0]` again. The semaphore is unsignalled, so that's fine. However, the image in question is still being presented, we can't use it. That's why the semaphore doesn't get signalled immediately. The function call returns however and execution of main continues.
+- recording the command buffer is fine, but since `readyForRenderingSemaphores[0]` is not yet signalled, the call to submit will not result in any immediate execution. Instead the function will return, but GPU execution will wait for the semaphore to be signalled.
+- the subsequent call to `presentKHR` will not yield any immediate effect either, `readyForPresentingSemaphores[0]` is not signalled.
+- the `main` function will now wrap around again, set `frameInFlightIndex` to 1 and wait for the fence to be signalled again
+- eventually, presentation of swapchain image 0 will be finished when receiving the VSYNC signal and image 1 will be presented. Finishing presentation of image 0 will in turn cause `readyForRenderingSemaphores[0]` to be signalled, which then will unlock the blocked `submit` execution.
+
+... and so on.
+
 ---
 
 [^1]: There's a third type of synchronization primitive: events. They are used in more advanced cases, so we're not going to talk about them here.
