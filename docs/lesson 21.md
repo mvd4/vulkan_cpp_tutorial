@@ -15,7 +15,7 @@ while ( !glfwWindowShouldClose( window.get() ) )
 {
     glfwPollEvents();
 
-    logicalDevice.device->waitIdle();
+    logicalDevice->waitIdle();
     ...
 }
 ...
@@ -72,7 +72,7 @@ const vk::PipelineStageFlags waitStages[] = {
 const auto submitInfo = vk::SubmitInfo{}
     .setCommandBuffers( commandBuffers[ frameInFlightIndex ] )
     .setWaitSemaphores( *semaphore )
-    .setPWaitDstStageMask( waitStages );
+    .setWaitDstStageMask( waitStages );
 queue.submit( submitInfo );
 ...
 ```
@@ -85,10 +85,10 @@ In the last lesson we already learned that `PresentInfoKHR` - just like `SubmitI
 
 ```cpp
 ...
-auto readyForRenderingSemaphore = logicalDevice.device->createSemaphoreUnique(
+auto readyForRenderingSemaphore = logicalDevice->createSemaphoreUnique(
     vk::SemaphoreCreateInfo{}
 );
-auto readyForPresentingSemaphore = logicalDevice.device->createSemaphoreUnique(
+auto readyForPresentingSemaphore = logicalDevice->createSemaphoreUnique(
     vk::SemaphoreCreateInfo{}
 );
 ...
@@ -105,7 +105,7 @@ while ( !glfwWindowShouldClose( window.get() ) )
         .setCommandBuffers( commandBuffers[ frameInFlightIndex ] )
         .setWaitSemaphores( *readyForRenderingSemaphore )
         .setSignalSemaphores( *readyForPresentingSemaphore )
-        .setPWaitDstStageMask( waitStages );
+        .setWaitDstStageMask( waitStages );
     queue.submit( submitInfo );
 
     const auto presentInfo = vk::PresentInfoKHR{}
@@ -120,29 +120,37 @@ We create another semaphore[^2] just as before and add it to the `SubmitInfo` as
 
 Nice, so we have that one sorted out. However, there's still one problem we need to address. Remember, at the moment we are only ever processing one image at a time (because of the call to `waitIdle`). Having only one semaphore for each purpose is fine. However, we'd like to start rendering the next image already while the previous one is still being processed on the GPU. If we were to signal and wait on the same semaphores for different images in this case, things would get very messy.
 
-Luckily the fix is pretty straightforward: we simply use multiple semaphores instead. The naive approach would be to create one semaphore for each swapchain image. This has a problem though: we only learn about the index of the swapchain image we're going to use when we call `acquireNextImageKHR`. However, we'd already need that index to pass the correct semaphores to the functions, so we're in a chicken-egg situation here. But actually we don't need that many semaphores anyway: we still intend to limit the number of frames in flight, so we also only need that number of semaphores. Let's create and use them:
+Luckily the fix is pretty straightforward: we simply use multiple semaphores instead. The naive approach would be to create one semaphore for each swapchain image. This has a problem though: we only learn about the index of the swapchain image we're going to use when we call `acquireNextImageKHR`. However, we'd already need that index to pass the correct semaphores to the functions, so we're in a chicken-egg situation here. But actually we don't need that many semaphores anyway: we still intend to limit the number of frames in flight, so we also only need that number of semaphores.
+
+It's worth pausing here to note that the *number of frames in flight* and the *number of swapchain images* are two independent concepts. The swapchain image count is dictated by the presentation engine and tells us how many images we can present; the number of frames in flight is our own choice of how many frames the host is allowed to prepare before it has to wait for the GPU. To keep these apart, let's introduce a dedicated constant:
+
+```cpp
+constexpr std::uint32_t maxFramesInFlight = 2u;
+```
+
+The command buffers, semaphores and (later) fences are then all sized to `maxFramesInFlight`. Let's create and use the semaphores:
 
 ```cpp
 ...
 std::vector< vk::UniqueSemaphore > readyForRenderingSemaphores;
 std::vector< vk::UniqueSemaphore > readyForPresentingSemaphores;
-for( std::uint32_t i = 0; i < requestedSwapchainImageCount; ++i )
+for( std::uint32_t i = 0; i < maxFramesInFlight; ++i )
 {
-    readyForRenderingSemaphores.push_back( logicalDevice.device->createSemaphoreUnique(
+    readyForRenderingSemaphores.push_back( logicalDevice->createSemaphoreUnique(
         vk::SemaphoreCreateInfo{}
     ) );
 
-    readyForPresentingSemaphores.push_back( logicalDevice.device->createSemaphoreUnique(
+    readyForPresentingSemaphores.push_back( logicalDevice->createSemaphoreUnique(
         vk::SemaphoreCreateInfo{}
     ) );
 }
-const auto queue = logicalDevice.device->getQueue( logicalDevice.queueFamilyIndex, 0 );
+const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
 size_t frameInFlightIndex = 0;
 while ( !glfwWindowShouldClose( window.get() ) )
 {
     ...
-    auto imageIndex = logicalDevice.device->acquireNextImageKHR(
+    auto imageIndex = logicalDevice->acquireNextImageKHR(
         *swapchain,
         std::numeric_limits< std::uint64_t >::max(),
         *readyForRenderingSemaphores[ frameInFlightIndex ]
@@ -162,7 +170,7 @@ while ( !glfwWindowShouldClose( window.get() ) )
         .setCommandBuffers( commandBuffers[ frameInFlightIndex ] )
         .setWaitSemaphores( *readyForRenderingSemaphores[ frameInFlightIndex ] )
         .setSignalSemaphores( *readyForPresentingSemaphores[ frameInFlightIndex ] )
-        .setPWaitDstStageMask( waitStages );
+        .setWaitDstStageMask( waitStages );
     queue.submit( submitInfo );
 
     const auto presentInfo = vk::PresentInfoKHR{}
@@ -185,9 +193,9 @@ What we need to do is to make our application wait using resources until they be
 std::vector< vk::UniqueFence > inFlightFences;
 std::vector< vk::UniqueSemaphore > readyForRenderingSemaphores;
 std::vector< vk::UniqueSemaphore > readyForPresentingSemaphores;
-for( std::uint32_t i = 0; i < requestedSwapchainImageCount; ++i )
+for( std::uint32_t i = 0; i < maxFramesInFlight; ++i )
 {
-    inFlightFences.push_back( logicalDevice.device->createFenceUnique(
+    inFlightFences.push_back( logicalDevice->createFenceUnique(
         vk::FenceCreateInfo{}.setFlags( vk::FenceCreateFlagBits::eSignaled )
     ) );
     ...
@@ -220,7 +228,9 @@ while ( !glfwWindowShouldClose( window.get() ) )
 {
     glfwPollEvents();
 
-    auto result = logicalDevice.device->waitForFences(
+    // we wait with an infinite timeout, so the result can only ever be eSuccess and
+    // there is no need to check it
+    auto result = logicalDevice->waitForFences(
         *inFlightFences[ frameInFlightIndex ],
         true,
         std::numeric_limits< std::uint64_t >::max()
@@ -241,14 +251,16 @@ The first part is easy: once we have waited, the fence has done its duty for thi
 ...
 glfwPollEvents();
 
-auto result = logicalDevice.device->waitForFences(
+// we wait with an infinite timeout, so the result can only ever be eSuccess and
+// there is no need to check it
+auto result = logicalDevice->waitForFences(
     *inFlightFences[ frameInFlightIndex ],
     true,
     std::numeric_limits< std::uint64_t >::max()
 );
-logicalDevice.device->resetFences( *inFlightFences[ frameInFlightIndex ] );
+logicalDevice->resetFences( *inFlightFences[ frameInFlightIndex ] );
 
-auto imageIndex = logicalDevice.device->acquireNextImageKHR(
+auto imageIndex = logicalDevice->acquireNextImageKHR(
 ...
 ```
 But when do we signal it (or rather: when do we want the GPU to signal it)?
@@ -283,7 +295,7 @@ So we can pass a fence that will be signaled when all the submits have been comp
 
 Compile and run this version, all should work as before and without any validation errors while running.
 
-Phew! This has been a lot and it's easy to get lost in all that synchronization, so let's quickly recap how our rendering loop is synchronized now by looking at an example (for simplicity's sake, I'm assuming that the actual number of swapchain images equals `requestedSwapchainImageCount`):
+Phew! This has been a lot and it's easy to get lost in all that synchronization, so let's quickly recap how our rendering loop is synchronized now by looking at an example (for simplicity's sake, I'm assuming that the actual number of swapchain images equals `maxFramesInFlight`):
 
 ![Visualization showing the flow of function calls, the state of the semaphores and fences and the checks and signals in our render loop.](images/Synchronization_2.png "Fig. 2: Example of synchronization in our rendering loop")
 
@@ -298,7 +310,7 @@ Phew! This has been a lot and it's easy to get lost in all that synchronization,
 - eventually, the GPU finishes executing `commandBuffers[0]` and signals both, `readyForPresentingSemaphores[0]` and `inFlightFences[0]`
 - signalling `readyForPresentingSemaphore[0]` unlocks the previously blocked call to `presentKHR` for swapchain image 0, so that frame is now being presented while the semaphore is being reset
 - signalling `inFlightFences[0]` also unlocks the blocked `waitForFences` call and the main program resumes execution. Note that because the fence was signalled when the command buffer execution was completed, that implicitly also signalled the availability of the respective framebuffer and rendering semaphore, so re-using them is fine from now on. First we reset the fence though.
-- then we call `acquireNextImageKHR` with `readyForRenderingSemaphores[0]` again. The semaphore is unsignalled, so xthe call is fine. However, the image in question is still being presented, we can't use it. That's why the semaphore doesn't get signalled immediately. The function call returns however and execution of main continues.
+- then we call `acquireNextImageKHR` with `readyForRenderingSemaphores[0]` again. The semaphore is unsignalled, so the call is fine. However, the image in question is still being presented, we can't use it. That's why the semaphore doesn't get signalled immediately. The function call returns however and execution of main continues.
 - recording the command buffer is fine, but since `readyForRenderingSemaphores[0]` is not yet signalled, the call to submit will not result in any immediate execution[^4]. Instead the function will return, but GPU execution will wait for the semaphore to be signalled.
 - the subsequent call to `presentKHR` will not yield any immediate effect either, `readyForPresentingSemaphores[0]` is not signalled.
 - the `main` function will now wrap around again, set `frameInFlightIndex` to 1 and wait for the fence to be signalled again
@@ -321,7 +333,7 @@ try
         ...
     }
 
-    logicalDevice.device->waitIdle();
+    logicalDevice->waitIdle();
 }
 ...
 ```
@@ -333,6 +345,6 @@ And that's finally it for today. It's been quite a bit of work, but we've made o
 ---
 
 [^1]: There's a third type of synchronization primitive: events. They are used in more advanced cases, so we're not going to talk about them here.
-[^2]: You might be tempted to reuse the same semaphore as for acquiring the image. After all that one will be reset once the rendering starts, so it should be fine to use it to signal render completion. The problem is that if `submit` is still waiting on the semaphore (because the image hasn't been acquired yet), the host may already have issued the `presentKHR` call by the time the semaphore gets signaled. Both calls would then be waiting on the same semaphore and would resume at the same time, effectively synchronizing rendering and presentation to start together — defeating the purpose.
+[^2]: You might be tempted to reuse the same semaphore as for acquiring the image. After all that one will be reset once the rendering starts, so it should be fine to use it to signal render completion. The problem is that the order of operations is not guaranteed, and Vulkan requires that the wait is already queued when the signal happens. Concretely, if `submit` is still waiting on the semaphore (because the image hasn't been acquired yet) the host may already have issued the `presentKHR` call by the time it gets signaled. Both calls would then be waiting on the same semaphore and resume together, effectively synchronizing rendering and presentation to start at the same time.
 [^3]: Semaphores reset automatically once a wait is satisfied, there is no explicit resetting happening
-[^4]: Actually, since we set the `waitStageDstMask` parameter to `eColorAttachmentOutput`, the command buffer might start executing until it reaches the point where it'd have to access the color attachement. I made this simplification for better readability, and it doesn't change the general flow.
+[^4]: Actually, since we set the wait stage (via `setWaitDstStageMask`) to `eColorAttachmentOutput`, the command buffer might start executing until it reaches the point where it'd have to access the color attachment. I made this simplification for better readability, and it doesn't change the general flow.

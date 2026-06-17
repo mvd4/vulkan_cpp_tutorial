@@ -19,7 +19,6 @@ License.
 
 #include "devices.hpp"
 #include "glfw_utils.hpp"
-#include "memory.hpp"
 #include "pipelines.hpp"
 #include "presentation.hpp"
 #include "rendering.hpp"
@@ -36,6 +35,7 @@ auto main() -> int
     constexpr int windowWidth = 800;
     constexpr int windowHeight = 600;
     constexpr std::uint32_t requestedSwapchainImageCount = 2u;
+    constexpr std::uint32_t maxFramesInFlight = 2u;
 
     try
     {
@@ -102,23 +102,23 @@ auto main() -> int
         const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
             .setCommandPool( *commandPool )
             .setLevel( vk::CommandBufferLevel::ePrimary )
-            .setCommandBufferCount( requestedSwapchainImageCount );
+            .setCommandBufferCount( maxFramesInFlight );
         const auto commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
 
         std::vector< vk::UniqueFence > inFlightFences;
         std::vector< vk::UniqueSemaphore > readyForRenderingSemaphores;
         std::vector< vk::UniqueSemaphore > readyForPresentingSemaphores;
-        for( std::uint32_t i = 0; i < requestedSwapchainImageCount; ++i )
+        for( std::uint32_t i = 0; i < maxFramesInFlight; ++i )
         {
-            inFlightFences.push_back( logicalDevice.device->createFenceUnique(
+            inFlightFences.push_back( logicalDevice->createFenceUnique(
                 vk::FenceCreateInfo{}.setFlags( vk::FenceCreateFlagBits::eSignaled )
             ) );
 
-            readyForRenderingSemaphores.push_back( logicalDevice.device->createSemaphoreUnique(
+            readyForRenderingSemaphores.push_back( logicalDevice->createSemaphoreUnique(
                 vk::SemaphoreCreateInfo{}
             ) );
 
-            readyForPresentingSemaphores.push_back( logicalDevice.device->createSemaphoreUnique(
+            readyForPresentingSemaphores.push_back( logicalDevice->createSemaphoreUnique(
                 vk::SemaphoreCreateInfo{}
             ) );
         }
@@ -129,14 +129,16 @@ auto main() -> int
         {
             glfwPollEvents();
 
-            auto result = logicalDevice.device->waitForFences(
+            // we wait with an infinite timeout, so the result can only ever be eSuccess and
+            // there is no need to check it
+            auto result = logicalDevice->waitForFences(
                 *inFlightFences[ frameInFlightIndex ],
                 true,
                 std::numeric_limits< std::uint64_t >::max()
             );
-            logicalDevice.device->resetFences( *inFlightFences[ frameInFlightIndex ] );
+            logicalDevice->resetFences( *inFlightFences[ frameInFlightIndex ] );
 
-            auto imageIndex = logicalDevice.device->acquireNextImageKHR(
+            auto imageIndex = logicalDevice->acquireNextImageKHR(
                 *swapchain,
                 std::numeric_limits< std::uint64_t >::max(),
                 *readyForRenderingSemaphores[ frameInFlightIndex ]
@@ -156,7 +158,7 @@ auto main() -> int
                 .setCommandBuffers( commandBuffers[ frameInFlightIndex ] )
                 .setWaitSemaphores( *readyForRenderingSemaphores[ frameInFlightIndex ] )
                 .setSignalSemaphores( *readyForPresentingSemaphores[ frameInFlightIndex ] )
-                .setPWaitDstStageMask( waitStages );
+                .setWaitDstStageMask( waitStages );
 
             queue.submit( submitInfo, *inFlightFences[ frameInFlightIndex ] );
 
@@ -169,10 +171,10 @@ auto main() -> int
             if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )
                 throw std::runtime_error( "presenting failed" );
 
-            frameInFlightIndex = ( frameInFlightIndex + 1 ) % requestedSwapchainImageCount;
+            frameInFlightIndex = ( frameInFlightIndex + 1 ) % maxFramesInFlight;
         }
 
-        logicalDevice.device->waitIdle();
+        logicalDevice->waitIdle();
     }
     catch( const std::exception& e )
     {
