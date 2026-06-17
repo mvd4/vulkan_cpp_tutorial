@@ -118,7 +118,7 @@ while ( !glfwWindowShouldClose( window.get() ) )
 ```
 We create another semaphore[^2] just as before and add it to the `SubmitInfo` as semaphore to signal when the command buffer has completed. We also add it to the `PresentInfoKHR` as semaphore to wait for. That way presenting will not happen before the command buffer is done with the respective image. I've renamed the semaphore we already had to make the usage of both clearer. Compile and run this version, you should see no visual change and no validation errors while the application is running (yes, you'll see some when closing the app, we're going to take care of those eventually).
 
-Nice, so we have that one sorted out. However, there's still one problem we need to address. Remember, at the moment we are only ever processing one image at a time (because of the call to `waitIdle`). Having only one semaphore for each purpose is fine. However, we'd like to start rendering the next image already while the previous one is still being processed on the GPU. I we were to signal and wait on the same semaphores for different images in this case, things would get very messy.
+Nice, so we have that one sorted out. However, there's still one problem we need to address. Remember, at the moment we are only ever processing one image at a time (because of the call to `waitIdle`). Having only one semaphore for each purpose is fine. However, we'd like to start rendering the next image already while the previous one is still being processed on the GPU. If we were to signal and wait on the same semaphores for different images in this case, things would get very messy.
 
 Luckily the fix is pretty straightforward: we simply use multiple semaphores instead. The naive approach would be to create one semaphore for each swapchain image. This has a problem though: we only learn about the index of the swapchain image we're going to use when we call `acquireNextImageKHR`. However, we'd already need that index to pass the correct semaphores to the functions, so we're in a chicken-egg situation here. But actually we don't need that many semaphores anyway: we still intend to limit the number of frames in flight, so we also only need that number of semaphores. Let's create and use them:
 
@@ -178,7 +178,7 @@ And with that we're prepared for processing multiple framebuffers in parallel. T
 ## Using Fences
 The problem that the validation errors informed us about was that we were trying to use a command buffer before the GPU was done with it. In a real-world application this will probably not be a very common problem, as the rendering will likely take more time and we'll rather have the opposite problem. But the command buffer is not the only resource for which we'll need to ensure that we're using it before it's ready. The same applies e.g. to the semaphores we have introduced since. So let's try to fix this issue.
 
-What we need to do is to make our application wait using resources until they become available again. So the host application needs to wait for the GPU, which means the right synchronization primitive for this use case is probably a fence. So let's create a one every command buffer in flight:
+What we need to do is to make our application wait using resources until they become available again. So the host application needs to wait for the GPU, which means the right synchronization primitive for this use case is probably a fence. So let's create one every command buffer in flight:
 
 ```cpp
 ...
@@ -263,7 +263,7 @@ The `readyForPresentingSemaphores` are always used after the corresponding `read
 
 So, how do we achieve that?
 
-Looking at our code, the last function that uses both, the `readyForRenderingSemaphores` and the command buffer, it the call to `queue.submit`. And if we look a bit closer at the signature of this function again, it actually has an optional second parameter that seems to fit our purpose:
+Looking at our code, the last function that uses both, the `readyForRenderingSemaphores` and the command buffer, is the call to `queue.submit`. And if we look a bit closer at the signature of this function again, it actually has an optional second parameter that seems to fit our purpose:
 
 ```cpp
 class Queue
@@ -285,28 +285,54 @@ Compile and run this version, all should work as before and without any validati
 
 Phew! This has been a lot and it's easy to get lost in all that synchronization, so let's quickly recap how our rendering loop is synchronized now by looking at an example (for simplicity's sake, I'm assuming that the actual number of swapchain images equals `requestedSwapchainImageCount`):
 
-![Visualization showing the flow of function calls, the state of the semaphores and fences and the checks and signals in our render loop.](images/Synchronization 2.png "Fig. 2: Example of synchronization in our rendering loop")
+![Visualization showing the flow of function calls, the state of the semaphores and fences and the checks and signals in our render loop.](images/Synchronization_2.png "Fig. 2: Example of synchronization in our rendering loop")
 
 - We start with `frameInFlightIndex=0`.
 - The first call in our rendering loop is `waitForFences`. Since we created the fences in a signaled state, this doesn't wait but immediately proceeds to the `resetFences`, which resets the `inFlightFences[0]` to an unsignaled state.
-- next, we call `acquireNextImageKHR` with `readyForRenderingSemaphores[0]`, which has been created in a unsignaled state. We didn't use any of the swapchain images yet, so the call immediately signals the semaphore and returns index 0
+- next, we call `acquireNextImageKHR` with `readyForRenderingSemaphores[0]`, which has been created in an unsignaled state. We didn't use any of the swapchain images yet, so the call immediately signals the semaphore and returns index 0
 - next we record the command buffers. As said above, recording in itself is safe because we're not actually accessing any of the resources. We only use references to the command- and framebuffers here.
-- then we `submit` the command buffer. Because we pass `readyForRenderingSemaphores[0]` as the wait semaphore, the call would wait until that is being signaled. This has already happened, so it is reset and the commands in `commandBuffers[0]` start executing right away.
+- then we `submit` the command buffer. Because we pass `readyForRenderingSemaphores[0]` as the wait semaphore, the GPU would wait before the color attachment stage until it is signaled. This has already happened here, so the semaphore is reset[^3] and the commands in `commandBuffers[0]` start executing right away.
 - importantly, execution of the main program doesn't stop to wait for the command buffer to be processed, instead it moves on directly to the call to `presentKHR`. However, since we pass `readyForPresentingSemaphores[0]` as a wait semaphore here, and that one is not yet signalled, nothing happens just now. The call returns and the main program can continue execution.
 - this whole sequence repeats for `frameInFlightIndex=1`
 - and now it gets interesting: `frameInFlightIndex` wraps around to 0, but `commandBuffer[0]` is still being executed. Which means that also the semaphores and `framebuffer` for index 0 are still in use. If we didn't have synchronization, we'd run into exactly the error we've seen at the beginning of this lesson. We do have the fences now though, and because `inFlightFences[0]` isn't signalled yet, program execution of `main()` halts at `waitForFences`.
-- eventually, the GPU finishes executing `commandBuffers[0]` and signals both,  `readyForPresentingSemaphores[0]` and `inFlightFences[0]`
+- eventually, the GPU finishes executing `commandBuffers[0]` and signals both, `readyForPresentingSemaphores[0]` and `inFlightFences[0]`
 - signalling `readyForPresentingSemaphore[0]` unlocks the previously blocked call to `presentKHR` for swapchain image 0, so that frame is now being presented while the semaphore is being reset
-- signalling `inFlightFences[0]` also unlocks the blocked `waitForFences` call and the main program resumes execution. Note that because the fence was singalled when the command buffer execution was completed, that implicitly also signalled the availability of the respective framebuffer and rendering semaphore, so re-using them is fine from now on. First we reset the fence though.
-- then we call `acquireNextImageKHR` with `readyForRenderingSemaphores[0]` again. The semaphore is unsignalled, so that's fine. However, the image in question is still being presented, we can't use it. That's why the semaphore doesn't get signalled immediately. The function call returns however and execution of main continues.
-- recording the command buffer is fine, but since `readyForRenderingSemaphores[0]` is not yet signalled, the call to submit will not result in any immediate execution. Instead the function will return, but GPU execution will wait for the semaphore to be signalled.
+- signalling `inFlightFences[0]` also unlocks the blocked `waitForFences` call and the main program resumes execution. Note that because the fence was signalled when the command buffer execution was completed, that implicitly also signalled the availability of the respective framebuffer and rendering semaphore, so re-using them is fine from now on. First we reset the fence though.
+- then we call `acquireNextImageKHR` with `readyForRenderingSemaphores[0]` again. The semaphore is unsignalled, so xthe call is fine. However, the image in question is still being presented, we can't use it. That's why the semaphore doesn't get signalled immediately. The function call returns however and execution of main continues.
+- recording the command buffer is fine, but since `readyForRenderingSemaphores[0]` is not yet signalled, the call to submit will not result in any immediate execution[^4]. Instead the function will return, but GPU execution will wait for the semaphore to be signalled.
 - the subsequent call to `presentKHR` will not yield any immediate effect either, `readyForPresentingSemaphores[0]` is not signalled.
 - the `main` function will now wrap around again, set `frameInFlightIndex` to 1 and wait for the fence to be signalled again
-- eventually, presentation of swapchain image 0 will be finished when receiving the VSYNC signal and image 1 will be presented. Finishing presentation of image 0 will in turn cause `readyForRenderingSemaphores[0]` to be signalled, which then will unlock the blocked `submit` execution.
+- eventually, presentation of swapchain image 0 will be finished when receiving the VSYNC signal and image 1 will be presented instead. Finishing presentation of image 0 will in turn cause `readyForRenderingSemaphores[0]` to be signalled, which then will unlock the blocked `submit` execution.
 
 ... and so on.
+
+## Finishing Up
+Now everything works fine - until you close the application. At that point you get several validation errors again, all complaining about destroying something that is in use. What causes them is the fact that when we exit the render loop we also reach the end of our try block. All of the `Unique...` objects that we created are thus being cleaned up while there's still at least one command buffer being executed on the GPU.
+
+To fix that we make use of `waitIdle` again. This time the blunt tool is actually appropriate: we are exiting the application, so we no longer care about losing rendering performance or blocking our host application for a few milliseconds. Anything more sophisticated than that would add unnecessary complexity.
+
+```cpp
+...
+try
+{
+    ...
+    while ( !glfwWindowShouldClose( window.get() ) )
+    {
+        ...
+    }
+
+    logicalDevice.device->waitIdle();
+}
+...
+```
+
+With that in place the validation errors on exit should be gone as well.
+
+And that's finally it for today. It's been quite a bit of work, but we've made our pipeline much more robust already.
 
 ---
 
 [^1]: There's a third type of synchronization primitive: events. They are used in more advanced cases, so we're not going to talk about them here.
 [^2]: You might be tempted to reuse the same semaphore as for acquiring the image. After all that one will be reset once the rendering starts, so it should be fine to use it to signal render completion. The problem is that if `submit` is still waiting on the semaphore (because the image hasn't been acquired yet), the host may already have issued the `presentKHR` call by the time the semaphore gets signaled. Both calls would then be waiting on the same semaphore and would resume at the same time, effectively synchronizing rendering and presentation to start together — defeating the purpose.
+[^3]: Semaphores reset automatically once a wait is satisfied, there is no explicit resetting happening
+[^4]: Actually, since we set the `waitStageDstMask` parameter to `eColorAttachmentOutput`, the command buffer might start executing until it reaches the point where it'd have to access the color attachement. I made this simplification for better readability, and it doesn't change the general flow.

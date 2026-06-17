@@ -171,6 +171,8 @@ auto main() -> int
 
             frameInFlightIndex = ( frameInFlightIndex + 1 ) % requestedSwapchainImageCount;
         }
+
+        logicalDevice.device->waitIdle();
     }
     catch( const std::exception& e )
     {
