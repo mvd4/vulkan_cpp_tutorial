@@ -73,25 +73,15 @@ auto main() -> int
             swapchainExtent
         );
 
-        const auto swapchain = vcpp::createSwapchain(
+        auto swapchain = vcpp::Swapchain{
             logicalDevice,
+            *renderPass,
             *surface,
             surfaceFormats[0],
             swapchainExtent,
-            requestedSwapchainImageCount
-        );
-
-        const auto imageViews = vcpp::createSwapchainImageViews(
-            logicalDevice,
-            *swapchain,
-            surfaceFormats[0].format );
-
-        const auto framebuffers = vcpp::createFramebuffers(
-            logicalDevice,
-            imageViews,
-            swapchainExtent,
-            *renderPass
-        );
+            maxFramesInFlight,
+            requestedSwapchainImageCount,
+        };
 
         const auto commandPool = logicalDevice->createCommandPoolUnique(
             vk::CommandPoolCreateInfo{}
@@ -105,60 +95,41 @@ auto main() -> int
             .setCommandBufferCount( maxFramesInFlight );
         const auto commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
 
-        auto swapchainSync = vcpp::SwapchainSync{ logicalDevice, requestedSwapchainImageCount };
-
         const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
+        const auto swapchains = std::array< vk::SwapchainKHR, 1 >{ swapchain };
 
-        size_t frameInFlightIndex = 0;
         while ( !glfwWindowShouldClose( window.get() ) )
         {
             glfwPollEvents();
 
-            auto frameSync = swapchainSync.getNextFrameSync();
-
-            // we wait with an infinite timeout, so the result can only ever be eSuccess and
-            // there is no need to check it
-            auto result = logicalDevice->waitForFences(
-                frameSync.inFlightFence,
-                true,
-                std::numeric_limits< std::uint64_t >::max()
-            );
-            logicalDevice->resetFences( frameSync.inFlightFence );
-
-            auto imageIndex = logicalDevice->acquireNextImageKHR(
-                *swapchain,
-                std::numeric_limits< std::uint64_t >::max(),
-                frameSync.readyForRenderingSemaphore
-            ).value;
+            const auto frame = swapchain.getNextFrame();
 
             vcpp::recordCommandBuffer(
-                commandBuffers[ frameInFlightIndex ],
+                commandBuffers[ frame.frameInFlightIndex ],
                 *pipeline,
                 *renderPass,
-                *framebuffers[ imageIndex ],
+                frame.framebuffer,
                 swapchainExtent
             );
 
             const vk::PipelineStageFlags waitStages[] = {
                 vk::PipelineStageFlagBits::eColorAttachmentOutput };
             const auto submitInfo = vk::SubmitInfo{}
-                .setCommandBuffers( commandBuffers[ frameInFlightIndex ] )
-                .setWaitSemaphores( frameSync.readyForRenderingSemaphore )
-                .setSignalSemaphores( frameSync.readyForPresentingSemaphore )
+                .setCommandBuffers( commandBuffers[ frame.frameInFlightIndex ] )
+                .setWaitSemaphores( frame.readyForRenderingSemaphore )
+                .setSignalSemaphores( frame.readyForPresentingSemaphore )
                 .setWaitDstStageMask( waitStages );
 
-            queue.submit( submitInfo, frameSync.inFlightFence );
+            queue.submit( submitInfo, frame.inFlightFence );
 
             const auto presentInfo = vk::PresentInfoKHR{}
-                .setSwapchains( *swapchain )
-                .setImageIndices( imageIndex )
-                .setWaitSemaphores( frameSync.readyForPresentingSemaphore );
+                .setSwapchains( swapchains )
+                .setImageIndices( frame.swapchainImageIndex )
+                .setWaitSemaphores( frame.readyForPresentingSemaphore );
 
-            result = queue.presentKHR( presentInfo );
+            const auto result = queue.presentKHR( presentInfo );
             if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )
                 throw std::runtime_error( "presenting failed" );
-
-            frameInFlightIndex = ( frameInFlightIndex + 1 ) % maxFramesInFlight;
         }
 
         logicalDevice->waitIdle();

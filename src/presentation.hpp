@@ -25,51 +25,53 @@ License.
 
 namespace vcpp
 {
-    class SwapchainSync
+    class Swapchain
     {
     public:
 
-        struct FrameSync
+        struct FrameData
         {
+            std::uint32_t frameInFlightIndex;
+            std::uint32_t swapchainImageIndex;
+
+            vk::Framebuffer framebuffer;
+
             vk::Fence inFlightFence;
             vk::Semaphore readyForRenderingSemaphore;
             vk::Semaphore readyForPresentingSemaphore;
         };
 
+        Swapchain(
+            const vk::Device& logicalDevice,
+            const vk::RenderPass& renderPass,
+            const vk::SurfaceKHR& surface,
+            const vk::SurfaceFormatKHR& surfaceFormat,
+            const vk::Extent2D& imageExtent,
+            std::uint32_t maxFramesInFlight,
+            std::uint32_t requestedSwapchainImageCount
+        );
 
-        SwapchainSync( const vk::Device& logicalDevice, std::uint32_t maxFramesInFlight );
+        Swapchain( const Swapchain& ) = delete;
+        Swapchain( Swapchain&& ) = delete;
+        auto operator=( const Swapchain& ) -> Swapchain& = delete;
+        auto operator=( Swapchain&& ) -> Swapchain& = delete;
 
-        FrameSync getNextFrameSync();
+        operator vk::SwapchainKHR() const { return *m_swapchain; }
+
+        auto getNextFrame() -> FrameData;
 
     private:
 
-        std::uint32_t m_maxFramesInFlight;
+        vk::Device m_logicalDevice;
+        vk::UniqueSwapchainKHR m_swapchain;
+
         std::uint32_t m_currentFrameIndex = 0;
+
+        std::vector< vk::UniqueImageView > m_imageViews;
+        std::vector< vk::UniqueFramebuffer > m_framebuffers;
 
         std::vector< vk::UniqueFence > m_inFlightFences;
         std::vector< vk::UniqueSemaphore > m_readyForRenderingSemaphores;
         std::vector< vk::UniqueSemaphore > m_readyForPresentingSemaphores;
     };
-
-
-    auto createSwapchain(
-        const vk::Device& logicalDevice,
-        const vk::SurfaceKHR& surface,
-        const vk::SurfaceFormatKHR& surfaceFormat,
-        const vk::Extent2D& surfaceExtent,
-        std::uint32_t minSwapchainImageCount
-    ) -> vk::UniqueSwapchainKHR;
-
-    auto createSwapchainImageViews(
-        const vk::Device& logicalDevice,
-        const vk::SwapchainKHR& swapchain,
-        const vk::Format& imageFormat
-    ) -> std::vector< vk::UniqueImageView >;
-
-    auto createFramebuffers(
-        const vk::Device& logicalDevice,
-        const std::vector< vk::UniqueImageView >& imageViews,
-        const vk::Extent2D& imageExtent,
-        const vk::RenderPass& renderPass
-    ) -> std::vector< vk::UniqueFramebuffer >;
 }
