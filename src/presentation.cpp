@@ -19,7 +19,6 @@ License.
 
 #include "presentation.hpp"
 
-
 namespace {
 
     auto createImageView(
@@ -49,6 +48,36 @@ namespace {
 
 namespace vcpp
 {
+    SwapchainSync::SwapchainSync( const vk::Device& logicalDevice, std::uint32_t maxFramesInFlight )
+        : m_maxFramesInFlight{ maxFramesInFlight }
+    {
+        for( std::uint32_t i = 0; i < maxFramesInFlight; ++i )
+        {
+            m_inFlightFences.push_back( logicalDevice.createFenceUnique(
+                vk::FenceCreateInfo{}.setFlags( vk::FenceCreateFlagBits::eSignaled )
+            ) );
+
+            m_readyForRenderingSemaphores.push_back( logicalDevice.createSemaphoreUnique(
+                vk::SemaphoreCreateInfo{}
+            ) );
+
+            m_readyForPresentingSemaphores.push_back( logicalDevice.createSemaphoreUnique(
+                vk::SemaphoreCreateInfo{}
+            ) );
+        }
+    }
+
+    auto SwapchainSync::getNextFrameSync() -> FrameSync
+    {
+        const auto result = FrameSync{
+            *m_inFlightFences[ m_currentFrameIndex ],
+            *m_readyForRenderingSemaphores[ m_currentFrameIndex ],
+            *m_readyForPresentingSemaphores[ m_currentFrameIndex ]
+        };
+
+        m_currentFrameIndex = (m_currentFrameIndex + 1) % m_maxFramesInFlight;
+        return result;
+    }
 
     auto createSwapchain(
         const vk::Device& logicalDevice,
@@ -105,14 +134,14 @@ namespace vcpp
         for( const auto& view : imageViews )
         {
             const std::array< vk::ImageView, 1 > attachments = { *view };
-            const auto framebufferCreateInfo = vk::FramebufferCreateInfo{}
+            const auto frameBufferCreateInfo = vk::FramebufferCreateInfo{}
                 .setRenderPass( renderPass )
                 .setAttachments( attachments )
                 .setWidth( imageExtent.width )
                 .setHeight( imageExtent.height )
                 .setLayers( 1 );
 
-            result.push_back( logicalDevice.createFramebufferUnique( framebufferCreateInfo ) );
+            result.push_back( logicalDevice.createFramebufferUnique( frameBufferCreateInfo ) );
         }
 
         return result;

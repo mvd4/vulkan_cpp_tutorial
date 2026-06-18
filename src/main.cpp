@@ -105,23 +105,8 @@ auto main() -> int
             .setCommandBufferCount( maxFramesInFlight );
         const auto commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
 
-        std::vector< vk::UniqueFence > inFlightFences;
-        std::vector< vk::UniqueSemaphore > readyForRenderingSemaphores;
-        std::vector< vk::UniqueSemaphore > readyForPresentingSemaphores;
-        for( std::uint32_t i = 0; i < maxFramesInFlight; ++i )
-        {
-            inFlightFences.push_back( logicalDevice->createFenceUnique(
-                vk::FenceCreateInfo{}.setFlags( vk::FenceCreateFlagBits::eSignaled )
-            ) );
+        auto swapchainSync = vcpp::SwapchainSync{ logicalDevice, requestedSwapchainImageCount };
 
-            readyForRenderingSemaphores.push_back( logicalDevice->createSemaphoreUnique(
-                vk::SemaphoreCreateInfo{}
-            ) );
-
-            readyForPresentingSemaphores.push_back( logicalDevice->createSemaphoreUnique(
-                vk::SemaphoreCreateInfo{}
-            ) );
-        }
         const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
         size_t frameInFlightIndex = 0;
@@ -129,19 +114,21 @@ auto main() -> int
         {
             glfwPollEvents();
 
+            auto frameSync = swapchainSync.getNextFrameSync();
+
             // we wait with an infinite timeout, so the result can only ever be eSuccess and
             // there is no need to check it
             auto result = logicalDevice->waitForFences(
-                *inFlightFences[ frameInFlightIndex ],
+                frameSync.inFlightFence,
                 true,
                 std::numeric_limits< std::uint64_t >::max()
             );
-            logicalDevice->resetFences( *inFlightFences[ frameInFlightIndex ] );
+            logicalDevice->resetFences( frameSync.inFlightFence );
 
             auto imageIndex = logicalDevice->acquireNextImageKHR(
                 *swapchain,
                 std::numeric_limits< std::uint64_t >::max(),
-                *readyForRenderingSemaphores[ frameInFlightIndex ]
+                frameSync.readyForRenderingSemaphore
             ).value;
 
             vcpp::recordCommandBuffer(
@@ -156,16 +143,16 @@ auto main() -> int
                 vk::PipelineStageFlagBits::eColorAttachmentOutput };
             const auto submitInfo = vk::SubmitInfo{}
                 .setCommandBuffers( commandBuffers[ frameInFlightIndex ] )
-                .setWaitSemaphores( *readyForRenderingSemaphores[ frameInFlightIndex ] )
-                .setSignalSemaphores( *readyForPresentingSemaphores[ frameInFlightIndex ] )
+                .setWaitSemaphores( frameSync.readyForRenderingSemaphore )
+                .setSignalSemaphores( frameSync.readyForPresentingSemaphore )
                 .setWaitDstStageMask( waitStages );
 
-            queue.submit( submitInfo, *inFlightFences[ frameInFlightIndex ] );
+            queue.submit( submitInfo, frameSync.inFlightFence );
 
             const auto presentInfo = vk::PresentInfoKHR{}
                 .setSwapchains( *swapchain )
                 .setImageIndices( imageIndex )
-                .setWaitSemaphores( *readyForPresentingSemaphores[ frameInFlightIndex ] );
+                .setWaitSemaphores( frameSync.readyForPresentingSemaphore );
 
             result = queue.presentKHR( presentInfo );
             if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )

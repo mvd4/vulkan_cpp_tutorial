@@ -25,6 +25,33 @@ License.
 
 namespace vcpp
 {
+    class SwapchainSync
+    {
+    public:
+
+        struct FrameSync
+        {
+            vk::Fence inFlightFence;
+            vk::Semaphore readyForRenderingSemaphore;
+            vk::Semaphore readyForPresentingSemaphore;
+        };
+
+
+        SwapchainSync( const vk::Device& logicalDevice, std::uint32_t maxFramesInFlight );
+
+        FrameSync getNextFrameSync();
+
+    private:
+
+        std::uint32_t m_maxFramesInFlight;
+        std::uint32_t m_currentFrameIndex = 0;
+
+        std::vector< vk::UniqueFence > m_inFlightFences;
+        std::vector< vk::UniqueSemaphore > m_readyForRenderingSemaphores;
+        std::vector< vk::UniqueSemaphore > m_readyForPresentingSemaphores;
+    };
+
+
     auto createSwapchain(
         const vk::Device& logicalDevice,
         const vk::SurfaceKHR& surface,
