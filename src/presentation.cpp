@@ -19,6 +19,10 @@ License.
 
 #include "presentation.hpp"
 
+#include <array>
+#include <cassert>
+#include <limits>
+
 namespace {
 
     auto createImageView(
@@ -170,7 +174,7 @@ namespace vcpp
             *m_readyForPresentingSemaphores[ m_currentFrameIndex ]
         };
 
-        m_currentFrameIndex = (m_currentFrameIndex + 1) % m_inFlightFences.size();
+        m_currentFrameIndex = ( m_currentFrameIndex + 1 ) % m_inFlightFences.size();
         return frame;
     }
 

@@ -124,9 +124,9 @@ private:
 };
 ```
 
-The name SwapchainSync would no longer reflect the classes purpose, so I renamed it. Moving the framebuffers and image views into the class means that we also need to pass all the arguments necessary to create them to our constructor. Since we now have the `vector` holding the framebuffers directly in the class, there's no reason to keep its size around as a separate variable.
+The name SwapchainSync would no longer reflect the class's purpose, so I renamed it. Moving the framebuffers and image views into the class means that we also need to pass all the arguments necessary to create them to our constructor. Since we now have the `vector` holding the framebuffers directly in the class, there's no reason to keep its size around as a separate variable.
 
-I also decided to take this opportunity to rectify the inaccuracy I already mentioned in lesson 20: there is no technical reason why the number of frames we allow to be in flight at the same time on the host / GPU side needs to be the same as the number of images in the swapchain. In fact, there are scenarios where a diveriging size makes sense. So I want to give the users of this new class the control to do so.
+I also decided to take this opportunity to rectify the inaccuracy I already mentioned in lesson 20: there is no technical reason why the number of frames we allow to be in flight at the same time on the host / GPU side needs to be the same as the number of images in the swapchain. In fact, there are scenarios where a diverging size makes sense. So I want to give the users of this new class the control to do so.
 
 In the implementation we can make use of the functions that we already had in place to create the framebuffers and image views:
 ```cpp
@@ -159,7 +159,7 @@ SwapchainState::SwapchainState(
 }
 ```
 
-In our render loop we need access to the current framebuffer, so we probably should return it alongside the synchronization objects and index. We have a problem in the implementation of `getNextFrameSync` though: to determine the correct framebuffer and in-flight fence, we need the current swapchain image index. We could pass that in as a parameter, but to acquire the index via`acquireNextImageKHR`, we need the `readyForRenderingSemaphore`. So we'd end up in a chicken-egg situation. We could resolve it by splitting the `getNextFrame` function into two. The other option is to acquire the image index within the function. The latter would result in this class declaration:
+In our render loop we need access to the current framebuffer, so we probably should return it alongside the synchronization objects and index. We have a problem in the implementation of `getNextFrameSync` though: to determine the correct framebuffer and in-flight fence, we need the current swapchain image index. We could pass that in as a parameter, but to acquire the index via `acquireNextImageKHR`, we need the `readyForRenderingSemaphore`. So we'd end up in a chicken-egg situation. We could resolve it by splitting the `getNextFrame` function into two. The other option is to acquire the image index within the function. The latter would result in this class declaration:
 
 ```cpp
 class Swapchain
@@ -168,8 +168,8 @@ public:
 
     struct FrameData
     {
-        std::uint32_t swapchainImageIndex;
         std::uint32_t frameInFlightIndex;
+        std::uint32_t swapchainImageIndex;
 
         vk::Framebuffer framebuffer;
 
@@ -277,7 +277,7 @@ while ( !glfwWindowShouldClose( window.get() ) )
         .setCommandBuffers( commandBuffers[ frame.frameInFlightIndex ] )
         .setWaitSemaphores( frame.readyForRenderingSemaphore )
         .setSignalSemaphores( frame.readyForPresentingSemaphore )
-        .setPWaitDstStageMask( waitStages.data() );
+        .setWaitDstStageMask( waitStages );
     queue.submit( submitInfo, frame.inFlightFence );
 
     const auto presentInfo = vk::PresentInfoKHR{}
@@ -290,11 +290,11 @@ while ( !glfwWindowShouldClose( window.get() ) )
         throw std::runtime_error( "presenting failed" );
 }
 ```
-Play around with this, changing the `maxFramesInFlight` and `minSwapchainImages` constants in `main.cpp` independently from each other. The rendering loop should work without errors for all combinations[^2].
+Play around with this, changing the `maxFramesInFlight` and `requestedSwapchainImageCount` constants in `main.cpp` independently from each other. The rendering loop should work without errors for all combinations[^2].
 
 And with this done, we're now in a much better position to tackle the remaining problems with our rendering loop. That's what we're going to do in the next lesson.
 
 ---
 
 [^1]: https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#Rc-struct
-[^2]: The exception being of course if you set either of these constants to 0, which is why we asserted against it in the `Swapchain` constructor. You also need to make sure that `minSwapchainImages >= VkSurfaceCapabilitiesKHR::minImageCount` as obtained by `vkGetPhysicalDeviceSurfaceCapabilitiesKHR()`. We don't do that here, but in production code it'd be a good idea to check for that case.
+[^2]: The exception being of course if you set either of these constants to 0, which is why we asserted against it in the `Swapchain` constructor. You also need to make sure that `requestedSwapchainImageCount >= VkSurfaceCapabilitiesKHR::minImageCount` as obtained by `vkGetPhysicalDeviceSurfaceCapabilitiesKHR()`. We don't do that here, but in production code it'd be a good idea to check for that case.
