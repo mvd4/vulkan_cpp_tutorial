@@ -32,10 +32,12 @@ License.
 namespace
 {
     bool windowMinimized = false;
+    bool framebufferSizeChanged = true;
 
     void onFramebufferSizeChanged( [[maybe_unused]] GLFWwindow* window, int width, int height )
     {
         windowMinimized = width == 0 && height == 0;
+        framebufferSizeChanged = true;
     }
 }
 
@@ -74,14 +76,7 @@ auto main() -> int
 
         const auto swapchainExtent = vk::Extent2D{ windowWidth, windowHeight };
 
-        const auto pipeline = vcpp::createGraphicsPipeline(
-            logicalDevice,
-            *pipelineLayout,
-            *vertexShader,
-            *fragmentShader,
-            *renderPass,
-            swapchainExtent
-        );
+        vk::UniquePipeline pipeline;
 
         auto swapchain = vcpp::Swapchain{
             logicalDevice,
@@ -114,6 +109,25 @@ auto main() -> int
 
             if ( windowMinimized )
                 continue;
+
+           if ( framebufferSizeChanged )
+            {
+                logicalDevice.device->waitIdle();
+
+                pipeline.reset();
+
+                const auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR( *surface );
+
+                pipeline = createGraphicsPipeline(
+                    logicalDevice,
+                    *pipelineLayout,
+                    *vertexShader,
+                    *fragmentShader,
+                    *renderPass,
+                    capabilities.currentExtent );
+
+                framebufferSizeChanged = false;
+            }
 
             const auto frame = swapchain.getNextFrame();
 

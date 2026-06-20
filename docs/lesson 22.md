@@ -118,3 +118,7 @@ Before we delete the pipeline we need to wait until the GPU isn't using it anymo
 ```cpp
 vk::UniquePipeline pipeline;
 ```
+
+---
+
+[^1]: Yes, there is a small optimization possible here: we could check whether the new extent is equal to the old one and avoid a pipeline / swapchain recreation in the case of a restore after a minimize. Personally I think this is not worth the effort because it won't happen often and a minimal delay won't hurt the user experience either in this case.
