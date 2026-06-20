@@ -24,7 +24,7 @@ namespace
     }
 }
 
-int main()
+auto main() -> int
 {
     ...
     try
@@ -63,7 +63,9 @@ class PhysicalDevice
 };
 ```
 
-The returned `vk::SurfaceCapabilitiesKHR` struct has a member `currentExtent` which will always be the current extent of the swapchain framebuffers - exactly what we need. With that in mind we can get started. First we need another flag that tells us when the window has changed size:
+The returned `vk::SurfaceCapabilitiesKHR` struct has a member `currentExtent` which on most platforms reports the current extent of the surface - exactly what we need. There is one caveat to be aware of: some platforms (most notably Wayland) report a special value of `0xFFFFFFFF` for both `width` and `height`, which means "you decide". In that case you have to take the framebuffer size from GLFW yourself and clamp it to the `minImageExtent` / `maxImageExtent` range from the capabilities. To keep this lesson focused we'll rely on `currentExtent` directly, but keep this in mind if you ever target Wayland.
+
+With that in mind we can get started. First we need another flag that tells us when the window has changed size:
 
 ```cpp
 namespace
@@ -99,7 +101,7 @@ while ( !glfwWindowShouldClose( window.get() ) )
 
         const auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR( *surface );
 
-        pipeline = createGraphicsPipeline(
+        pipeline = vcpp::createGraphicsPipeline(
             logicalDevice,
             *pipelineLayout,
             *vertexShader,
@@ -170,7 +172,7 @@ while ( !glfwWindowShouldClose( window.get() ) )
         const auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR( *surface );
         swapchainExtent = capabilities.currentExtent;
 
-        pipeline = createGraphicsPipeline(
+        pipeline = vcpp::createGraphicsPipeline(
             logicalDevice,
             *pipelineLayout,
             *vertexShader,
@@ -179,7 +181,7 @@ while ( !glfwWindowShouldClose( window.get() ) )
             swapchainExtent
         );
 
-        swapchain = createSwapchain(
+        swapchain = vcpp::createSwapchain(
             logicalDevice,
             *renderPass,
             *surface,
@@ -198,17 +200,31 @@ while ( !glfwWindowShouldClose( window.get() ) )
 
 Note that because the swapchain handle changes on every recreation, the `swapchains` array we pass to `vk::PresentInfoKHR` can no longer live above the render loop - we now need to build it from the current `*swapchain` on every iteration.
 
-If you compile and run this version you'll find that it does not have any of the resizing problems anymore.
+If you compile and run this version you'll find that it handles the resizing case much better than before. There are still two presentation results we should deal with explicitly though.
 
-There's one more thing we can clean up: the `vk::Result::eSuboptimalKHR` we previously treated as an error from `queue.presentKHR` is in fact a hint that the swapchain no longer matches the surface perfectly. Now that we have a proper recreation path, we can use it as another trigger for `framebufferSizeChanged` instead of throwing:
+The first one is `vk::Result::eSuboptimalKHR`, which we previously treated as an error from `queue.presentKHR`. It is in fact a hint that the swapchain no longer matches the surface perfectly. Now that we have a proper recreation path, we can use it as another trigger for `framebufferSizeChanged` instead of throwing.
+
+The second one is `vk::Result::eErrorOutOfDateKHR`. This is the result we get when the swapchain has become completely incompatible with the surface, and it can be reported either by `queue.presentKHR` or already by `acquireNextImageKHR` inside `getNextFrame`. Unlike `eSuboptimalKHR`, which is a success code, `eErrorOutOfDateKHR` is an error code - and the Vulkan-Hpp wrapper turns error codes into exceptions. So we can't just inspect the return value; we have to catch a `vk::OutOfDateKHRError`. We wrap the whole acquire / submit / present block of the render loop in a `try` and react to the exception the same way we react to a suboptimal result:
 
 ```cpp
-const auto result = queue.presentKHR( presentInfo );
-if ( result == vk::Result::eSuboptimalKHR )
+try
+{
+    const auto frame = swapchain->getNextFrame();
+
+    // ... record command buffer, submit ...
+
+    const auto result = queue.presentKHR( presentInfo );
+    if ( result == vk::Result::eSuboptimalKHR )
+        framebufferSizeChanged = true;
+}
+catch ( const vk::OutOfDateKHRError& )
+{
+    // the swapchain no longer matches the surface and needs to be recreated
     framebufferSizeChanged = true;
-else if ( result != vk::Result::eSuccess )
-    throw std::runtime_error( "presenting failed" );
+}
 ```
+
+Note that we no longer need the explicit `throw` for a failed present: any genuine error from `acquireNextImageKHR` or `queue.presentKHR` still surfaces as a Vulkan-Hpp exception, which our outer `try` / `catch` in `main` already handles.
 
 With that we've achieved everything that we set out to do. Thanks to our refactoring last time this turned out to be pretty simple in the end.
 

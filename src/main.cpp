@@ -109,7 +109,7 @@ auto main() -> int
                 const auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR( *surface );
                 swapchainExtent = capabilities.currentExtent;
 
-                pipeline = createGraphicsPipeline(
+                pipeline = vcpp::createGraphicsPipeline(
                     logicalDevice,
                     *pipelineLayout,
                     *vertexShader,
@@ -118,7 +118,7 @@ auto main() -> int
                     swapchainExtent
                 );
 
-                swapchain = createSwapchain(
+                swapchain = vcpp::createSwapchain(
                     logicalDevice,
                     *renderPass,
                     *surface,
@@ -131,37 +131,43 @@ auto main() -> int
                 framebufferSizeChanged = false;
             }
 
-            const auto frame = swapchain->getNextFrame();
+            try
+            {
+                const auto frame = swapchain->getNextFrame();
 
-            vcpp::recordCommandBuffer(
-                commandBuffers[ frame.frameInFlightIndex ],
-                *pipeline,
-                *renderPass,
-                frame.framebuffer,
-                swapchainExtent
-            );
+                vcpp::recordCommandBuffer(
+                    commandBuffers[ frame.frameInFlightIndex ],
+                    *pipeline,
+                    *renderPass,
+                    frame.framebuffer,
+                    swapchainExtent
+                );
 
-            const vk::PipelineStageFlags waitStages[] = {
-                vk::PipelineStageFlagBits::eColorAttachmentOutput };
-            const auto submitInfo = vk::SubmitInfo{}
-                .setCommandBuffers( commandBuffers[ frame.frameInFlightIndex ] )
-                .setWaitSemaphores( frame.readyForRenderingSemaphore )
-                .setSignalSemaphores( frame.readyForPresentingSemaphore )
-                .setWaitDstStageMask( waitStages );
+                const vk::PipelineStageFlags waitStages[] = {
+                    vk::PipelineStageFlagBits::eColorAttachmentOutput };
+                const auto submitInfo = vk::SubmitInfo{}
+                    .setCommandBuffers( commandBuffers[ frame.frameInFlightIndex ] )
+                    .setWaitSemaphores( frame.readyForRenderingSemaphore )
+                    .setSignalSemaphores( frame.readyForPresentingSemaphore )
+                    .setWaitDstStageMask( waitStages );
 
-            queue.submit( submitInfo, frame.inFlightFence );
+                queue.submit( submitInfo, frame.inFlightFence );
 
-            const auto swapchains = std::array< vk::SwapchainKHR, 1 >{ *swapchain };
-            const auto presentInfo = vk::PresentInfoKHR{}
-                .setSwapchains( swapchains )
-                .setImageIndices( frame.swapchainImageIndex )
-                .setWaitSemaphores( frame.readyForPresentingSemaphore );
+                const auto swapchains = std::array< vk::SwapchainKHR, 1 >{ *swapchain };
+                const auto presentInfo = vk::PresentInfoKHR{}
+                    .setSwapchains( swapchains )
+                    .setImageIndices( frame.swapchainImageIndex )
+                    .setWaitSemaphores( frame.readyForPresentingSemaphore );
 
-            const auto result = queue.presentKHR( presentInfo );
-            if ( result == vk::Result::eSuboptimalKHR )
+                const auto result = queue.presentKHR( presentInfo );
+                if ( result == vk::Result::eSuboptimalKHR )
+                    framebufferSizeChanged = true;
+            }
+            catch ( const vk::OutOfDateKHRError& )
+            {
+                // the swapchain no longer matches the surface and needs to be recreated
                 framebufferSizeChanged = true;
-            else if ( result != vk::Result::eSuccess )
-                throw std::runtime_error( "presenting failed" );
+            }
         }
 
         logicalDevice->waitIdle();
