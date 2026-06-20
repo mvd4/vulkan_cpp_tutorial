@@ -200,6 +200,20 @@ Note that because the swapchain handle changes on every recreation, the `swapcha
 
 If you compile and run this version you'll find that it does not have any of the resizing problems anymore.
 
+There's one more thing we can clean up: the `vk::Result::eSuboptimalKHR` we previously treated as an error from `queue.presentKHR` is in fact a hint that the swapchain no longer matches the surface perfectly. Now that we have a proper recreation path, we can use it as another trigger for `framebufferSizeChanged` instead of throwing:
+
+```cpp
+const auto result = queue.presentKHR( presentInfo );
+if ( result == vk::Result::eSuboptimalKHR )
+    framebufferSizeChanged = true;
+else if ( result != vk::Result::eSuccess )
+    throw std::runtime_error( "presenting failed" );
+```
+
+With that we've achieved everything that we set out to do. Thanks to our refactoring last time this turned out to be pretty simple in the end.
+
+So far, so good. We're still quite far from a fully functional rendering loop for real-world usage, but we're making progress. Next time I want to look at how we can move the geometry to render out of the shader and into our application.
+
 ---
 
 [^1]: Yes, there is a small optimization possible here: we could check whether the new extent is equal to the old one and avoid a pipeline / swapchain recreation in the case of a restore after a minimize. Personally I think this is not worth the effort because it won't happen often and a minimal delay won't hurt the user experience either in this case.

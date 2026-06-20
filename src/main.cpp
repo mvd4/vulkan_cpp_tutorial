@@ -158,7 +158,9 @@ auto main() -> int
                 .setWaitSemaphores( frame.readyForPresentingSemaphore );
 
             const auto result = queue.presentKHR( presentInfo );
-            if ( result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR )
+            if ( result == vk::Result::eSuboptimalKHR )
+                framebufferSizeChanged = true;
+            else if ( result != vk::Result::eSuccess )
                 throw std::runtime_error( "presenting failed" );
         }
 
