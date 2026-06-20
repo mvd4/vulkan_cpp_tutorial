@@ -90,7 +90,7 @@ namespace {
         return result;
     }
 
-    auto createSwapchain(
+    auto createSwapchainInternal(
         const vk::Device& logicalDevice,
         const vk::SurfaceKHR& surface,
         const vk::SurfaceFormatKHR& surfaceFormat,
@@ -129,7 +129,7 @@ namespace vcpp
         std::uint32_t requestedSwapchainImageCount
     )
         : m_logicalDevice{ logicalDevice }
-        , m_swapchain{ createSwapchain( logicalDevice, surface, surfaceFormat, imageExtent, requestedSwapchainImageCount ) }
+        , m_swapchain{ createSwapchainInternal( logicalDevice, surface, surfaceFormat, imageExtent, requestedSwapchainImageCount ) }
         , m_imageViews{ createSwapchainImageViews( logicalDevice, *m_swapchain, surfaceFormat.format ) }
         , m_framebuffers{ createFramebuffers( logicalDevice, m_imageViews, imageExtent, renderPass ) }
     {
@@ -178,4 +178,24 @@ namespace vcpp
         return frame;
     }
 
+    auto createSwapchain(
+        const vk::Device& logicalDevice,
+        const vk::RenderPass& renderPass,
+        const vk::SurfaceKHR& surface,
+        const vk::SurfaceFormatKHR& surfaceFormat,
+        const vk::Extent2D& imageExtent,
+        std::uint32_t maxFramesInFlight,
+        std::uint32_t requestedSwapchainImageCount
+    ) -> std::unique_ptr< Swapchain >
+    {
+        return std::make_unique< Swapchain >(
+            logicalDevice,
+            renderPass,
+            surface,
+            surfaceFormat,
+            imageExtent,
+            maxFramesInFlight,
+            requestedSwapchainImageCount
+         );
+    }
 } // namespace vcpp

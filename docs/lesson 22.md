@@ -119,6 +119,87 @@ Before we delete the pipeline we need to wait until the GPU isn't using it anymo
 vk::UniquePipeline pipeline;
 ```
 
+That was pretty easy. Too bad our swapchain is not a `unique_ptr` so that we could do exactly the same with it. But wait, why don't we just make it a `unique_ptr` and implement the same pattern for it? Let's give it a try. We'll implement a creation function to abstract away the call to `make_unique` and to match the pattern for the pipeline creation (note that we have to rename the internal function to avoid conflicts):
+
+```cpp
+auto createSwapchain(
+    const vk::Device& logicalDevice,
+    const vk::RenderPass& renderPass,
+    const vk::SurfaceKHR& surface,
+    const vk::SurfaceFormatKHR& surfaceFormat,
+    const vk::Extent2D& imageExtent,
+    std::uint32_t maxFramesInFlight,
+    std::uint32_t requestedSwapchainImageCount
+) -> std::unique_ptr< Swapchain >
+{
+    return std::make_unique< Swapchain >(
+        logicalDevice,
+        renderPass,
+        surface,
+        surfaceFormat,
+        imageExtent,
+        maxFramesInFlight,
+        requestedSwapchainImageCount
+        );
+}
+```
+
+And with that we can do exactly the same with the swapchain as with the pipeline:
+
+```cpp
+...
+
+vk::UniquePipeline pipeline;
+std::unique_ptr< vcpp::Swapchain > swapchain;
+vk::Extent2D swapchainExtent;
+
+while ( !glfwWindowShouldClose( window.get() ) )
+{
+    glfwPollEvents();
+
+    if ( windowMinimized )
+        continue;
+
+    if ( framebufferSizeChanged )
+    {
+        logicalDevice.device->waitIdle();
+
+        pipeline.reset();
+        swapchain.reset();
+
+        const auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR( *surface );
+        swapchainExtent = capabilities.currentExtent;
+
+        pipeline = createGraphicsPipeline(
+            logicalDevice,
+            *pipelineLayout,
+            *vertexShader,
+            *fragmentShader,
+            *renderPass,
+            swapchainExtent
+        );
+
+        swapchain = createSwapchain(
+            logicalDevice,
+            *renderPass,
+            *surface,
+            surfaceFormats[0],
+            swapchainExtent,
+            maxFramesInFlight,
+            requestedSwapchainImageCount
+        );
+
+        framebufferSizeChanged = false;
+    }
+
+    ...
+}
+```
+
+Note that because the swapchain handle changes on every recreation, the `swapchains` array we pass to `vk::PresentInfoKHR` can no longer live above the render loop - we now need to build it from the current `*swapchain` on every iteration.
+
+If you compile and run this version you'll find that it does not have any of the resizing problems anymore.
+
 ---
 
 [^1]: Yes, there is a small optimization possible here: we could check whether the new extent is equal to the old one and avoid a pipeline / swapchain recreation in the case of a restore after a minimize. Personally I think this is not worth the effort because it won't happen often and a minimal delay won't hurt the user experience either in this case.

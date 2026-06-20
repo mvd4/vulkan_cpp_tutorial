@@ -74,20 +74,6 @@ auto main() -> int
 
         const auto pipelineLayout = vcpp::createGraphicsPipelineLayout( logicalDevice );
 
-        const auto swapchainExtent = vk::Extent2D{ windowWidth, windowHeight };
-
-        vk::UniquePipeline pipeline;
-
-        auto swapchain = vcpp::Swapchain{
-            logicalDevice,
-            *renderPass,
-            *surface,
-            surfaceFormats[0],
-            swapchainExtent,
-            maxFramesInFlight,
-            requestedSwapchainImageCount,
-        };
-
         const auto commandPool = logicalDevice->createCommandPoolUnique(
             vk::CommandPoolCreateInfo{}
                 .setFlags( vk::CommandPoolCreateFlagBits::eResetCommandBuffer )
@@ -101,7 +87,10 @@ auto main() -> int
         const auto commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
 
         const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
-        const auto swapchains = std::array< vk::SwapchainKHR, 1 >{ swapchain };
+
+        vk::UniquePipeline pipeline;
+        std::unique_ptr< vcpp::Swapchain > swapchain;
+        vk::Extent2D swapchainExtent;
 
         while ( !glfwWindowShouldClose( window.get() ) )
         {
@@ -110,13 +99,15 @@ auto main() -> int
             if ( windowMinimized )
                 continue;
 
-           if ( framebufferSizeChanged )
+            if ( framebufferSizeChanged )
             {
                 logicalDevice.device->waitIdle();
 
                 pipeline.reset();
+                swapchain.reset();
 
                 const auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR( *surface );
+                swapchainExtent = capabilities.currentExtent;
 
                 pipeline = createGraphicsPipeline(
                     logicalDevice,
@@ -124,12 +115,23 @@ auto main() -> int
                     *vertexShader,
                     *fragmentShader,
                     *renderPass,
-                    capabilities.currentExtent );
+                    swapchainExtent
+                );
+
+                swapchain = createSwapchain(
+                    logicalDevice,
+                    *renderPass,
+                    *surface,
+                    surfaceFormats[0],
+                    swapchainExtent,
+                    maxFramesInFlight,
+                    requestedSwapchainImageCount
+                );
 
                 framebufferSizeChanged = false;
             }
 
-            const auto frame = swapchain.getNextFrame();
+            const auto frame = swapchain->getNextFrame();
 
             vcpp::recordCommandBuffer(
                 commandBuffers[ frame.frameInFlightIndex ],
@@ -149,6 +151,7 @@ auto main() -> int
 
             queue.submit( submitInfo, frame.inFlightFence );
 
+            const auto swapchains = std::array< vk::SwapchainKHR, 1 >{ *swapchain };
             const auto presentInfo = vk::PresentInfoKHR{}
                 .setSwapchains( swapchains )
                 .setImageIndices( frame.swapchainImageIndex )
