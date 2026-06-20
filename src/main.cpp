@@ -29,6 +29,15 @@ License.
 #include <limits>
 #include <stdexcept>
 
+namespace
+{
+    bool windowMinimized = false;
+
+    void onFramebufferSizeChanged( [[maybe_unused]] GLFWwindow* window, int width, int height )
+    {
+        windowMinimized = width == 0 && height == 0;
+    }
+}
 
 auto main() -> int
 {
@@ -41,6 +50,7 @@ auto main() -> int
     {
         const auto glfw = vcpp::GlfwInstance{};
         const auto window = vcpp::createWindow( windowWidth, windowHeight, "Vulkan C++ Tutorial" );
+        glfwSetFramebufferSizeCallback( window.get(), onFramebufferSizeChanged );
 
         const auto instance = vcpp::createVulkanInstance( vcpp::getRequiredExtensionsForGlfw() );
         const auto surface = vcpp::createSurface( *instance, *window );
@@ -101,6 +111,9 @@ auto main() -> int
         while ( !glfwWindowShouldClose( window.get() ) )
         {
             glfwPollEvents();
+
+            if ( windowMinimized )
+                continue;
 
             const auto frame = swapchain.getNextFrame();
 
