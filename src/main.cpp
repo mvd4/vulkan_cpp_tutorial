@@ -94,19 +94,62 @@ auto main() -> int
         std::unique_ptr< vcpp::Swapchain > swapchain;
         vk::Extent2D swapchainExtent;
 
-        constexpr size_t vertexCount = 3;
         constexpr size_t floatsPerVertex = 8;
         constexpr auto vertexFormats = std::array< vk::Format, 2 >{
             vk::Format::eR32G32B32A32Sfloat,
             vk::Format::eR32G32B32A32Sfloat,
         };
 
-        const auto vertices = std::array< float, floatsPerVertex * vertexCount >{
-            0.f, -.5f, 0.f, 1.f,    1.f, 0.f, 0.f, 1.f,
-            .5f, .5f, 0.f, 1.f,     0.f, 1.f, 0.f, 1.f,
-            -.5f, .5f, 0.f, 1.f,    1.f, 1.f, 0.f, 1.f
-        };
+        constexpr size_t vertexCount = 36;
+        const std::array< float, 8 * vertexCount > vertices = {
+            // front               (red)
+            -.5f, -.5f, .5f, 1.f,  1.f, 0.f, 0.f, 1.f,
+            .5f, -.5f, .5f, 1.f,   1.f, 0.f, 0.f, 1.f,
+            -.5f, .5f, .5f, 1.f,   1.f, 0.f, 0.f, 1.f,
+            .5f, -.5f, .5f, 1.f,   1.f, 0.f, 0.f, 1.f,
+            .5f, .5f, .5f, 1.f,    1.f, 0.f, 0.f, 1.f,
+            -.5f, .5f, .5f, 1.f,   1.f, 0.f, 0.f, 1.f,
 
+            // back                (yellow)
+            -.5f, -.5f, -.5f, 1.f, 1.f, 1.f, 0.f, 1.f,
+            .5f, -.5f, -.5f, 1.f,  1.f, 1.f, 0.f, 1.f,
+            -.5f, .5f, -.5f, 1.f,  1.f, 1.f, 0.f, 1.f,
+            .5f, -.5f, -.5f, 1.f,  1.f, 1.f, 0.f, 1.f,
+            .5f, .5f, -.5f, 1.f,   1.f, 1.f, 0.f, 1.f,
+            -.5f, .5f, -.5f, 1.f,  1.f, 1.f, 0.f, 1.f,
+
+            // left                (violet)
+            -.5f, -.5f, .5f, 1.f,  1.f, 0.f, 1.f, 1.f,
+            -.5f, -.5f, -.5f, 1.f, 1.f, 0.f, 1.f, 1.f,
+            -.5f, .5f, .5f, 1.f,   1.f, 0.f, 1.f, 1.f,
+            -.5f, -.5f, .5f, 1.f,  1.f, 0.f, 1.f, 1.f,
+            -.5f, .5f, -.5f, 1.f,  1.f, 0.f, 1.f, 1.f,
+            -.5f, .5f, .5f, 1.f,   1.f, 0.f, 1.f, 1.f,
+
+            // right               (green)
+            .5f, -.5f, .5f, 1.f,   0.f, 1.f, 0.f, 1.f,
+            .5f, -.5f, -.5f, 1.f,  0.f, 1.f, 0.f, 1.f,
+            .5f, .5f, -.5f, 1.f,   0.f, 1.f, 0.f, 1.f,
+            .5f, -.5f, .5f, 1.f,   0.f, 1.f, 0.f, 1.f,
+            .5f, .5f, -.5f, 1.f,   0.f, 1.f, 0.f, 1.f,
+            .5f, .5f, .5f, 1.f,    0.f, 1.f, 0.f, 1.f,
+
+            // top                 (turquoise)
+            -.5f, -.5f, .5f, 1.f,  0.f, 1.f, 1.f, 1.f,
+            .5f, -.5f, .5f, 1.f,   0.f, 1.f, 1.f, 1.f,
+            .5f, -.5f, -.5f, 1.f,  0.f, 1.f, 1.f, 1.f,
+            -.5f, -.5f, .5f, 1.f,  0.f, 1.f, 1.f, 1.f,
+            .5f, -.5f, -.5f, 1.f,  0.f, 1.f, 1.f, 1.f,
+            -.5f, -.5f, -.5f, 1.f, 0.f, 1.f, 1.f, 1.f,
+
+            // bottom              (blue)
+            -.5f, .5f, .5f, 1.f,   0.f, 0.f, 1.f, 1.f,
+            .5f, .5f, .5f, 1.f,    0.f, 0.f, 1.f, 1.f,
+            .5f, .5f, -.5f, 1.f,   0.f, 0.f, 1.f, 1.f,
+            -.5f, .5f, .5f, 1.f,   0.f, 0.f, 1.f, 1.f,
+            .5f, .5f, -.5f, 1.f,   0.f, 0.f, 1.f, 1.f,
+            -.5f, .5f, -.5f, 1.f,  0.f, 0.f, 1.f, 1.f,
+        };
 
         const auto gpuVertexBuffer = vcpp::createGPUBuffer(
             physicalDevice,
