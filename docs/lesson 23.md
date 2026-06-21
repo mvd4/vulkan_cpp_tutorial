@@ -1,7 +1,7 @@
 # Lesson 23: Vertex Input - Part 1
 Up to now, the vertex coordinates and colors are hardcoded in our shaders. This is obviously not how a real world application works because we wouldn't be able to change our scene without recompiling the shaders. So our goal for today is to make it possible to pass the vertex data to the pipeline from our application. Let's get started.
 
-As a first step let's remove the `positions` array from the vertex shader and paste it into the main function. Needless to say that we need to modify the code a bit to make it valid C++. Note that we're also bumping the vertices from 2D `vec2` values to full 4-component homogeneous coordinates (a `z` of `0` and a `w` of `1` for now); this matches what `gl_Position` expects and saves us a conversion step in the shader:
+As a first step let's remove the `positions` array from the vertex shader and paste it into the main function. Needless to say that we need to modify the code a bit to make it valid C++. Just like the hardcoded `vec4` array did, each vertex stays a full 4-component homogeneous coordinate (a `z` of `0` and a `w` of `1` for now); this matches what `gl_Position` expects and saves us a conversion step in the shader:
 
 ```cpp
 constexpr size_t vertexCount = 3;
@@ -71,14 +71,14 @@ struct VertexInputAttributeDescription
 Let's put that into practice now and update our vertex input state:
 
 ```cpp
-vk::UniquePipeline createGraphicsPipeline(
+auto createGraphicsPipeline(
     const vk::Device& logicalDevice,
     const vk::PipelineLayout& pipelineLayout,
     const vk::ShaderModule& vertexShader,
     const vk::ShaderModule& fragmentShader,
     const vk::RenderPass& renderPass,
     const vk::Extent2D& viewportExtent
-)
+) -> vk::UniquePipeline
 {
     ...
     constexpr std::uint32_t vertexStride = 4 * sizeof( float );
@@ -101,9 +101,9 @@ vk::UniquePipeline createGraphicsPipeline(
 }
 ```
 
-We only want to bind one buffer, so the binding index is 0, and the stride is four times the size of a float (one full vertex). Our vertices consist of just a single 4-dimensional position attribute, so the location index is also 0, and the offset within the vertex is 0 because the position starts right at the beginning. As mentioned above, the format usually used for `vec4` attributes is `vk::Format::eR32G32B32A32Sfloat`, so that's what we use here.
+We only want to bind one buffer, so the binding index is 0, and the stride is four times the size of a float (one full vertex)[^1]. Our vertices consist of just a single 4-dimensional position attribute, so the location index is also 0, and the offset within the vertex is 0 because the position starts right at the beginning. As mentioned above, the format usually used for `vec4` attributes is `vk::Format::eR32G32B32A32Sfloat`, so that's what we use here.
 
-Now that the pipeline is prepared to send the vertex data to the shader, we need to adapt the shader code to make use of it. For this we need to declare a 'Shader stage input variable'[^1] by using another variant of the `layout` directive (the same that we've actually already used in our fragment shader but which I didn't explain in detail so far):
+Now that the pipeline is prepared to send the vertex data to the shader, we need to adapt the shader code to make use of it. For this we need to declare a 'Shader stage input variable'[^2] by using another variant of the `layout` directive (the same that we've actually already used in our fragment shader but which I didn't explain in detail so far):
 
 ```glsl
 #version 450
@@ -121,14 +121,14 @@ The `location` is the same as above, i.e. it's the index of the attribute as def
 Pipeline and vertex shader are now ready to receive vertex data. The problem is: they don't actually get any yet. To change that we need to bind a GPU buffer containing the vertex data to the pipeline. Which means that we first need to transfer our input data to a GPU buffer in the same way as we did with the compute data back in lesson 6. We can just re-use the functions we created back then:
 
 ```cpp
-const auto gpuVertexBuffer = createGPUBuffer(
+const auto gpuVertexBuffer = vcpp::createGPUBuffer(
     physicalDevice,
     logicalDevice,
     sizeof( vertices ),
     vk::BufferUsageFlagBits::eVertexBuffer
 );
 
-vcpp::copyDataToBuffer( *logicalDevice.device, vertices, gpuVertexBuffer );
+vcpp::copyDataToBuffer( logicalDevice, vertices, gpuVertexBuffer );
 ```
 
 Note that `createGPUBuffer` defaults to host-visible, host-coherent memory, which lets us upload the data with a simple `memcpy`. For real-world rendering you would typically place vertex data in `eDeviceLocal` memory and stage the upload through a separate transfer buffer for better GPU performance. We'll keep things simple here and revisit this in a later lesson.
@@ -154,15 +154,15 @@ We only want to pass one vertex buffer completely, so our call is pretty straigh
 
 
 ```cpp
-void recordCommandBuffer(
+auto recordCommandBuffer(
     const vk::CommandBuffer& commandBuffer,
     const vk::Pipeline& pipeline,
     const vk::RenderPass& renderPass,
     const vk::Framebuffer& frameBuffer,
     const vk::Extent2D& renderExtent,
     const vk::Buffer& vertexBuffer,
-    const std::uint32_t vertexCount
-)
+    std::uint32_t vertexCount
+) -> void
 {
     ...
     commandBuffer.beginRenderPass( renderPassBeginInfo, vk::SubpassContents::eInline );
@@ -194,4 +194,5 @@ In the next lesson we're going to further increase the flexibility by enabling u
 
 ---
 
-[^1]: https://www.khronos.org/opengl/wiki/Layout_Qualifier_(GLSL)#Interface_layouts
+[^1]: It isn't ideal that we hardcode the vertex stride in the pipeline creation function and then duplicate it in the `main` function. We're going to address this in one of the next lessons, for now let's accept it in order to make progress.
+[^2]: https://www.khronos.org/opengl/wiki/Layout_Qualifier_(GLSL)#Interface_layouts

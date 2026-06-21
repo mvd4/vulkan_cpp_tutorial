@@ -31,6 +31,6 @@ namespace vcpp
         const vk::Framebuffer& frameBuffer,
         const vk::Extent2D& renderExtent,
         const vk::Buffer& vertexBuffer,
-        const std::uint32_t vertexCount
+        std::uint32_t vertexCount
     ) -> void;
 }

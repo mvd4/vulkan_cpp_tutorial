@@ -24,6 +24,7 @@ License.
 #include "presentation.hpp"
 #include "rendering.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -108,7 +109,7 @@ auto main() -> int
             vk::BufferUsageFlagBits::eVertexBuffer
         );
 
-        vcpp::copyDataToBuffer( *logicalDevice.device, vertices, gpuVertexBuffer );
+        vcpp::copyDataToBuffer( logicalDevice, vertices, gpuVertexBuffer );
 
 
         while ( !glfwWindowShouldClose( window.get() ) )
