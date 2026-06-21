@@ -163,22 +163,29 @@ namespace vcpp
                 .setModule( fragmentShader ),
         };
 
-        constexpr std::uint32_t vertexStride = 4 * sizeof( float );
+        constexpr std::uint32_t vertexStride = 8 * sizeof( float );
 
         const auto vertexBindingDescription = vk::VertexInputBindingDescription{}
             .setBinding( 0 )
             .setStride( vertexStride )
             .setInputRate( vk::VertexInputRate::eVertex );
 
-        const auto vertexAttributeDescription = vk::VertexInputAttributeDescription{}
-            .setBinding( 0 )
-            .setLocation( 0 )
-            .setFormat( vk::Format::eR32G32B32A32Sfloat )
-            .setOffset( 0 );
+        const auto vertexAttributeDescriptions = std::array< vk::VertexInputAttributeDescription, 2 >{
+            vk::VertexInputAttributeDescription{}
+                .setBinding( 0 )
+                .setLocation( 0 )
+                .setOffset( 0 )
+                .setFormat( vk::Format::eR32G32B32A32Sfloat ),
+            vk::VertexInputAttributeDescription{}
+                .setBinding( 0 )
+                .setLocation( 1 )
+                .setOffset( 4 * sizeof( float ) )
+                .setFormat( vk::Format::eR32G32B32A32Sfloat )
+        };
 
         const auto vertexInputState = vk::PipelineVertexInputStateCreateInfo{}
             .setVertexBindingDescriptions( vertexBindingDescription )
-            .setVertexAttributeDescriptions( vertexAttributeDescription );
+            .setVertexAttributeDescriptions( vertexAttributeDescriptions );
 
         const auto inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{}
             .setTopology( vk::PrimitiveTopology::eTriangleList );

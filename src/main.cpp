@@ -95,12 +95,13 @@ auto main() -> int
         vk::Extent2D swapchainExtent;
 
         constexpr size_t vertexCount = 3;
-        constexpr size_t floatsPerVertex = 4;
-        constexpr std::array< float, floatsPerVertex * vertexCount > vertices = {
-            0.0f, -0.5f, 0.0f, 1.0f,
-            0.5f, 0.5f, 0.0f, 1.0f,
-            -0.5f, 0.5f, 0.0f, 1.0f
+        constexpr size_t floatsPerVertex = 8;
+        const std::array< float, floatsPerVertex * vertexCount > vertices = {
+            0.f, -.5f, 0.f, 1.f,    1.f, 0.f, 0.f, 1.f,
+            .5f, .5f, 0.f, 1.f,     0.f, 1.f, 0.f, 1.f,
+            -.5f, .5f, 0.f, 1.f,    1.f, 1.f, 0.f, 1.f
         };
+
 
         const auto gpuVertexBuffer = vcpp::createGPUBuffer(
             physicalDevice,
