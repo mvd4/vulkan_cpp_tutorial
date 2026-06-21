@@ -163,7 +163,23 @@ namespace vcpp
                 .setModule( fragmentShader ),
         };
 
-        const auto vertexInputState = vk::PipelineVertexInputStateCreateInfo{};
+        constexpr std::uint32_t vertexStride = 4 * sizeof( float );
+
+        const auto vertexBindingDescription = vk::VertexInputBindingDescription{}
+            .setBinding( 0 )
+            .setStride( vertexStride )
+            .setInputRate( vk::VertexInputRate::eVertex );
+
+        const auto vertexAttributeDescription = vk::VertexInputAttributeDescription{}
+            .setBinding( 0 )
+            .setLocation( 0 )
+            .setFormat( vk::Format::eR32G32B32A32Sfloat )
+            .setOffset( 0 );
+
+        const auto vertexInputState = vk::PipelineVertexInputStateCreateInfo{}
+            .setVertexBindingDescriptions( vertexBindingDescription )
+            .setVertexAttributeDescriptions( vertexAttributeDescription );
+
         const auto inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{}
             .setTopology( vk::PrimitiveTopology::eTriangleList );
 

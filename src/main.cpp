@@ -19,6 +19,7 @@ License.
 
 #include "devices.hpp"
 #include "glfw_utils.hpp"
+#include "memory.hpp"
 #include "pipelines.hpp"
 #include "presentation.hpp"
 #include "rendering.hpp"
@@ -92,6 +93,24 @@ auto main() -> int
         std::unique_ptr< vcpp::Swapchain > swapchain;
         vk::Extent2D swapchainExtent;
 
+        constexpr size_t vertexCount = 3;
+        constexpr size_t floatsPerVertex = 4;
+        constexpr std::array< float, floatsPerVertex * vertexCount > vertices = {
+            0.0f, -0.5f, 0.0f, 1.0f,
+            0.5f, 0.5f, 0.0f, 1.0f,
+            -0.5f, 0.5f, 0.0f, 1.0f
+        };
+
+        const auto gpuVertexBuffer = vcpp::createGPUBuffer(
+            physicalDevice,
+            logicalDevice,
+            sizeof( vertices ),
+            vk::BufferUsageFlagBits::eVertexBuffer
+        );
+
+        vcpp::copyDataToBuffer( *logicalDevice.device, vertices, gpuVertexBuffer );
+
+
         while ( !glfwWindowShouldClose( window.get() ) )
         {
             glfwPollEvents();
@@ -140,7 +159,9 @@ auto main() -> int
                     *pipeline,
                     *renderPass,
                     frame.framebuffer,
-                    swapchainExtent
+                    swapchainExtent,
+                    *gpuVertexBuffer.buffer,
+                    vertexCount
                 );
 
                 const vk::PipelineStageFlags waitStages[] = {

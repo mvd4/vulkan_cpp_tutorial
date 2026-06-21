@@ -28,8 +28,10 @@ namespace vcpp
         const vk::CommandBuffer& commandBuffer,
         const vk::Pipeline& pipeline,
         const vk::RenderPass& renderPass,
-        const vk::Framebuffer& framebuffer,
-        const vk::Extent2D& renderExtent
+        const vk::Framebuffer& frameBuffer,
+        const vk::Extent2D& renderExtent,
+        const vk::Buffer& vertexBuffer,
+        const std::uint32_t vertexCount
     ) -> void
     {
         const auto clearValues = std::array< vk::ClearValue, 1 >{
@@ -38,18 +40,21 @@ namespace vcpp
 
         const auto renderPassBeginInfo = vk::RenderPassBeginInfo{}
             .setRenderPass( renderPass )
-            .setFramebuffer( framebuffer )
+            .setFramebuffer( frameBuffer )
             .setRenderArea( vk::Rect2D{ vk::Offset2D{ 0, 0 }, renderExtent } )
             .setClearValues( clearValues );
 
         commandBuffer.begin( vk::CommandBufferBeginInfo{} );
-        commandBuffer.bindPipeline( vk::PipelineBindPoint::eGraphics, pipeline );
 
         commandBuffer.beginRenderPass( renderPassBeginInfo, vk::SubpassContents::eInline );
-        commandBuffer.draw( 3, 1, 0, 0 );
+
+        commandBuffer.bindPipeline( vk::PipelineBindPoint::eGraphics, pipeline );
+        commandBuffer.bindVertexBuffers( 0, vertexBuffer, vk::DeviceSize{ 0 } );
+
+        commandBuffer.draw( vertexCount, 1, 0, 0 );
+
         commandBuffer.endRenderPass();
 
         commandBuffer.end();
     }
-
 }
