@@ -19,6 +19,8 @@ License.
 
 #include "pipelines.hpp"
 
+#include <vulkan/vulkan_format_traits.hpp>
+
 #include <array>
 #include <cstdint>
 #include <fstream>
@@ -149,7 +151,8 @@ namespace vcpp
         const vk::ShaderModule& vertexShader,
         const vk::ShaderModule& fragmentShader,
         const vk::RenderPass& renderPass,
-        const vk::Extent2D& viewportExtent
+        const vk::Extent2D& viewportExtent,
+        std::span< const vk::Format > vertexFormats
     ) -> vk::UniquePipeline
     {
         const auto shaderStageInfos = std::array< vk::PipelineShaderStageCreateInfo, 2 >{
@@ -163,25 +166,28 @@ namespace vcpp
                 .setModule( fragmentShader ),
         };
 
-        constexpr std::uint32_t vertexStride = 8 * sizeof( float );
+        // vk::blockSize gives the size of one attribute only for uncompressed formats. Compressed
+        // formats can never be used as vertex attributes, so this is fine here.
+        auto vertexAttributeDescriptions = std::vector< vk::VertexInputAttributeDescription >{};
+        std::uint32_t offset = 0;
+        std::uint32_t location = 0;
+        for ( const auto format : vertexFormats )
+        {
+            vertexAttributeDescriptions.push_back(
+                vk::VertexInputAttributeDescription{}
+                    .setBinding( 0 )
+                    .setLocation( location )
+                    .setOffset( offset )
+                    .setFormat( format )
+            );
+            offset += vk::blockSize( format );
+            ++location;
+        }
 
         const auto vertexBindingDescription = vk::VertexInputBindingDescription{}
             .setBinding( 0 )
-            .setStride( vertexStride )
+            .setStride( offset )
             .setInputRate( vk::VertexInputRate::eVertex );
-
-        const auto vertexAttributeDescriptions = std::array< vk::VertexInputAttributeDescription, 2 >{
-            vk::VertexInputAttributeDescription{}
-                .setBinding( 0 )
-                .setLocation( 0 )
-                .setOffset( 0 )
-                .setFormat( vk::Format::eR32G32B32A32Sfloat ),
-            vk::VertexInputAttributeDescription{}
-                .setBinding( 0 )
-                .setLocation( 1 )
-                .setOffset( 4 * sizeof( float ) )
-                .setFormat( vk::Format::eR32G32B32A32Sfloat )
-        };
 
         const auto vertexInputState = vk::PipelineVertexInputStateCreateInfo{}
             .setVertexBindingDescriptions( vertexBindingDescription )

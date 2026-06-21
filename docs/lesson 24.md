@@ -1,4 +1,4 @@
-# Vertex Input - Part 2
+# Lesson 24: Vertex Input - Part 2
 
 So, we can send the positions of our vertices from our application now. But so far all of our geometry will always be red because the color information is still hardcoded in the fragment shader. I'd like to have a bit more flexibility here as well and this is what we'll address today.
 
@@ -60,8 +60,8 @@ So let's add the color information to our vertices in the application:
 
 ```cpp
 constexpr size_t vertexCount = 3;
-    constexpr size_t floatsPerVertex = 8;
-    const std::array< float, floatsPerVertex * vertexCount > vertices = {
+constexpr size_t floatsPerVertex = 8;
+const auto vertices = std::array< float, floatsPerVertex * vertexCount >{
     0.f, -.5f, 0.f, 1.f,    1.f, 0.f, 0.f, 1.f,
     .5f, .5f, 0.f, 1.f,     0.f, 1.f, 0.f, 1.f,
     -.5f, .5f, 0.f, 1.f,    1.f, 1.f, 0.f, 1.f
@@ -105,3 +105,90 @@ Try out this version, you should see something like the following:
 ![Screenshot showing the rendering of our colored triangle on a dark blue background](images/Screenshot_2_Colored_Triangle.png "Fig. 1: The multi-colored triangle")
 
 So we can now give each vertex an individual color and the interpolation works as we expect it. Nice.
+
+Before we close for today I want to do a bit more refactoring: one thing that bothers me is the magic numbers we use to create the attribute descriptions in `createGraphicsPipeline`. Magic numbers are rarely a good idea. In this case they require us to change the pipeline creation code whenever our attribute format changes, which is cumbersome and error-prone. I want to fix that.
+
+At first sight it seems we need the offset, the size and the format for each vertex attribute description. We also need the stride, i.e. total size of one vertex in bytes. But thinking a bit more about it: the offset is just the sum of all the previous sizes. The stride is just the sum of all sizes[^1]. And the size is directly related to the format (after all we learned in the previous session that Vulkan uses the format to specify the size as well). So we actually only need the format.
+
+Conveniently, Vulkan-Hpp ships a helper for exactly this: `vk::blockSize( format )` from `vulkan_format_traits.hpp` returns the bytes per texel block, which for our uncompressed vertex formats is the size of one attribute. No hand-rolled switch required:
+
+```cpp
+#include <vulkan/vulkan_format_traits.hpp>
+
+...
+
+auto createGraphicsPipeline(
+    const vk::Device& logicalDevice,
+    const vk::PipelineLayout& pipelineLayout,
+    const vk::ShaderModule& vertexShader,
+    const vk::ShaderModule& fragmentShader,
+    const vk::RenderPass& renderPass,
+    const vk::Extent2D& viewportExtent,
+    std::span< const vk::Format > vertexFormats
+) -> vk::UniquePipeline
+{
+    ...
+
+    auto vertexAttributeDescriptions = std::vector< vk::VertexInputAttributeDescription >{};
+    std::uint32_t offset = 0;
+    std::uint32_t location = 0;
+    for ( const auto format : vertexFormats )
+    {
+        vertexAttributeDescriptions.push_back(
+            vk::VertexInputAttributeDescription{}
+                .setBinding( 0 )
+                .setLocation( location )
+                .setOffset( offset )
+                .setFormat( format )
+        );
+        offset += vk::blockSize( format );
+        ++location;
+    }
+
+    const auto vertexBindingDescription = vk::VertexInputBindingDescription{}
+        .setBinding( 0 )
+        .setStride( offset )
+        .setInputRate( vk::VertexInputRate::eVertex );
+
+    const auto vertexInputState = vk::PipelineVertexInputStateCreateInfo{}
+        .setVertexBindingDescriptions( vertexBindingDescription )
+        .setVertexAttributeDescriptions( vertexAttributeDescriptions );
+    ...
+}
+```
+
+We take the formats as a `std::span< const vk::Format >`[^2] so the caller can pass an array, a vector, or an initializer list without any conversion. We also had to reorder things a bit to streamline the calculations. But otherwise the code is pretty much the same as before, just with the vertex structure now defined from the outside. The only thing left to do is adapt the code in `main()` accordingly:
+
+```cpp
+...
+const auto vertexFormats = std::vector< vk::Format  >{
+    vk::Format::eR32G32B32A32Sfloat,
+    vk::Format::eR32G32B32A32Sfloat,
+};
+
+...
+
+while ( !glfwWindowShouldClose( window.get() ) )
+{
+    ...
+    pipeline = createGraphicsPipeline(
+        logicalDevice,
+        *pipelineLayout,
+        *vertexShader,
+        *fragmentShader,
+        *renderPass,
+        swapChainExtent,
+        vertexFormats
+    );
+    ...
+}
+```
+
+Alright, that's better. Now the pipeline implementation doesn't need to change anymore when we change the vertex formats. We still have to manually adjust `floatPerVertex` in `main()`, which isn't ideal. I'm also not too happy with the way we currently create everything related to our vertex buffer directly in the main function, but I'm going to leave it for now until we have a bit more clarity where this is all going.
+
+Next time we're finally going to go 3D for real.
+
+---
+
+[^1]: This assumes that the vertex buffer is tightly packed. For performance reasons it might be better to pad the vertex data to reach a multiple of 16 bytes or so. In this tutorial we'll keep things simple though and not look into that.
+[^2]: We almost always know the attribute count at compile time, so a templated function taking a `std::array` would avoid the heap allocation. I picked `std::span` here for ergonomics — it accepts arrays, vectors, and initializer lists alike, and this function is called rarely enough that the allocation isn't worth optimizing away.

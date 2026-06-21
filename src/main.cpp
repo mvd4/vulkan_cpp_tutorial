@@ -96,7 +96,12 @@ auto main() -> int
 
         constexpr size_t vertexCount = 3;
         constexpr size_t floatsPerVertex = 8;
-        const std::array< float, floatsPerVertex * vertexCount > vertices = {
+        constexpr auto vertexFormats = std::array< vk::Format, 2 >{
+            vk::Format::eR32G32B32A32Sfloat,
+            vk::Format::eR32G32B32A32Sfloat,
+        };
+
+        const auto vertices = std::array< float, floatsPerVertex * vertexCount >{
             0.f, -.5f, 0.f, 1.f,    1.f, 0.f, 0.f, 1.f,
             .5f, .5f, 0.f, 1.f,     0.f, 1.f, 0.f, 1.f,
             -.5f, .5f, 0.f, 1.f,    1.f, 1.f, 0.f, 1.f
@@ -136,7 +141,8 @@ auto main() -> int
                     *vertexShader,
                     *fragmentShader,
                     *renderPass,
-                    swapchainExtent
+                    swapchainExtent,
+                    vertexFormats
                 );
 
                 swapchain = vcpp::createSwapchain(
