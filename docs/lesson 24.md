@@ -161,7 +161,7 @@ We take the formats as a `std::span< const vk::Format >`[^2] so the caller can p
 
 ```cpp
 ...
-const auto vertexFormats = std::vector< vk::Format  >{
+constexpr auto vertexFormats = std::array< vk::Format, 2 >{
     vk::Format::eR32G32B32A32Sfloat,
     vk::Format::eR32G32B32A32Sfloat,
 };
@@ -171,24 +171,24 @@ const auto vertexFormats = std::vector< vk::Format  >{
 while ( !glfwWindowShouldClose( window.get() ) )
 {
     ...
-    pipeline = createGraphicsPipeline(
+    pipeline = vcpp::createGraphicsPipeline(
         logicalDevice,
         *pipelineLayout,
         *vertexShader,
         *fragmentShader,
         *renderPass,
-        swapChainExtent,
+        swapchainExtent,
         vertexFormats
     );
     ...
 }
 ```
 
-Alright, that's better. Now the pipeline implementation doesn't need to change anymore when we change the vertex formats. We still have to manually adjust `floatPerVertex` in `main()`, which isn't ideal. I'm also not too happy with the way we currently create everything related to our vertex buffer directly in the main function, but I'm going to leave it for now until we have a bit more clarity where this is all going.
+Alright, that's better. Now the pipeline implementation doesn't need to change anymore when we change the vertex formats. We still have to manually adjust `floatsPerVertex` in `main()`, which isn't ideal. I'm also not too happy with the way we currently create everything related to our vertex buffer directly in the main function, but I'm going to leave it for now until we have a bit more clarity where this is all going.
 
 Next time we're finally going to go 3D for real.
 
 ---
 
 [^1]: This assumes that the vertex buffer is tightly packed. For performance reasons it might be better to pad the vertex data to reach a multiple of 16 bytes or so. In this tutorial we'll keep things simple though and not look into that.
-[^2]: We almost always know the attribute count at compile time, so a templated function taking a `std::array` would avoid the heap allocation. I picked `std::span` here for ergonomics — it accepts arrays, vectors, and initializer lists alike, and this function is called rarely enough that the allocation isn't worth optimizing away.
+[^2]: We almost always know the attribute count at compile time, so a templated function taking a `std::array` would avoid the heap allocation. I picked `std::span` here for ergonomics - it accepts arrays, vectors, and initializer lists alike, and this function is called rarely enough that the allocation isn't worth optimizing away.
