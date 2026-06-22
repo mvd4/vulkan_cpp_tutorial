@@ -180,8 +180,100 @@ const std::array< Vertex, vertexCount > vertices = {
 
 We have to explicitly spell out the `Vertex` and `glm::vec4` constructors because both are marked as `explicit`. Quite a lot of typing, I know. The good news is that this layout is binary-compatible with our existing pipeline setup: a `Vertex` is just two `vec4`s back to back, which matches the two `R32G32B32A32_SFLOAT` attributes we configured earlier. So compiling and running this program should work fine.
 
+As said, there are two common types of projections, and GLM offers utilities for both of them. We're interested in a perspective transformation, so our go-to function is this one[^3]:
+
+```C++
+glm::mat4 glm::perspective( float fovy, float aspect, float zNear, float zFar );
+```
+
+- `fovy` (short for 'field of view y') is the vertical viewing angle in radians.
+- `aspect` is the aspect ratio, i.e. the ratio of your window's width and height
+- `zNear` and `zFar` are the depth limitations of your view frustum, i.e. objects that are closer than `zNear` or further off than `zFar` won't be rendered. Both values need to be positive as they mark the absolute distance from the viewer, independently of the direction of the z-Axis.
+
+Now that we know how to create the transformation matrix, the only thing left to do is to multiply each of the vertex coordinates with it before we send them off to the GPU. However, we need to redo that every time the aspect ratio of the window changes, because that changes the transformation. So the right place to do that is probably where we handle window size changes anyway. We cannot directly modify the vertices though since we always need to retain the orignal coordinates and multiply those with the transformation matrix. So we create a copy of the vertices, transform the coordinates of the copy and send that one to the GPU:
+
+```C++
+...
+auto verticesTemp = vertices;
+
+while ( !glfwWindowShouldClose( window.get() ) )
+{
+    ...
+
+    if ( framebufferSizeChanged )
+    {
+        ...
+        const auto projection = glm::perspective(
+            glm::radians( 30.0f ),
+            swapchainExtent.width / static_cast< float >( swapchainExtent.height ),
+            0.1f,
+            10.0f
+        );
+
+        for ( std::uint32_t i = 0; i < vertexCount; ++i )
+        {
+            verticesTemp[ i ].position = projection * vertices[ i ].position;
+        }
+
+        vcpp::copyDataToBuffer( *logicalDevice.device, verticesTemp, gpuVertexBuffer );
+
+        framebufferSizeChanged = false;
+    }
+
+    ...
+}
+```
+
+We obviously only transform the `position` member of each vertex - the colors are left untouched.
+
+Wow, what now? Running this version makes the whole window yellow (or, if we stretch the window to be very wide and shallow, we see pink and green areas on either side).
+
+If we think about it this is actually expected behaviour. Our cube is centered around the origin, i.e. the z values of the front face are at 0.5, those of the back face are at -0.5. Our camera is located in the origin and looking down the negative z-axis, so it's pretty obvious that we only see the back face and maybe a bit of the sides left and right.
+
+So we probably want to move our camera a bit further away from the cube so that we can see it fully. Alternatively we could move the cube away from the camera. Both are transformations, but what's the proper way to do that?
+
+The standard way to approach rendering a 3D scene is to use three transformations. The models that make up the scene are usually created individually, so their coordinates are relative to a coordinate system of their own. This is often called the local or object space. To place them in the scene at the right position and with the desired orientation a first transformation is applied. This is commonly called the model transformation. After that we have everything in the so-called world space. However, we usually want to be able to move around the scene or view it from a different position. Therefore a second transformation is applied that moves all the coordinates so that they are relative to the camera position and angle. That's the view transformation. The last transformation is the one we've already implemented: the projection transformation that maps the view-space coordinates to the normalized device coordinates that are required by the rasterization stage to do its job. If you're interested in a more detailed explanation of those transformations, I suggest you check out the article linked in the footnotes.
+
+The laws of linear algebra allow us to combine the transformations by simply multiplying the model coordinates by all matrices in one go. The only thing to watch out for here is that the multiplications have to happen in exactly the opposite order than the logical sequence. Matrix multiplication is not commutative, so a different order yields different results. Our transformation therefore should look something like this:
+
+```text
+v_device = M_proj * M_view * M_model * v_model
+```
+
+We have to decide now whether our cube should be located somewhere other than the origin, or whether our camera should look at the scene from elsewhere. In any case, the transformation that we'd need is a translation and GLM again supports us with a utility function:
+
+```C++
+glm::mat4 glm::translate( const glm::mat4& m, const glm::vec3& v );
+```
+
+- `m` is the matrix that is supposed to be translated. By defining the interface like this GLM allows for multiple transformations to be represented by the same matrix. E.g. you could have a translation and a rotation as your view transformation by passing the result of a rotation into `translate`. In our case where we only want a translation, we'll just pass a unity matrix.
+- `v` is the vector that determines the distance and direction of the translation
+
+Let's say we want to move our camera back a bit to be able to see the cube in its entirety. So we need to implement a view transformation which translates the object in the exact opposite direction, i.e. towards negative z values:
+
+```C++
+const auto view = glm::translate( glm::identity< glm::mat4 >(), glm::vec3{ 0.f, 0.f, -3.f } );
+
+const auto projection = glm::perspective(
+    glm::radians( 30.0f ),
+    swapChainExtent.width / static_cast< float >( swapChainExtent.height ),
+    0.1f,
+    10.0f );
+
+for ( std::uint32_t i = 0; i < vertexCount; ++i )
+{
+    verticesTemp[ i ].position = projection * view * vertices[ i ].position;
+}
+```
+
+We actually wouldn't need to recreate the view matrix with every size change, but it doesn't really hurt either and this way we have logically connected variables close to each other in the code[^4].
+
+That version of our application indeed shows us the full cube in perspective, only that it seems to be missing its red front face and we still can look inside it. Strange. Well, at least the faces remain squares if we resize the window[^5].
 
 ---
 
 [^1]: If this sounds a bit wasteful to you, you are right. We'll take care of the duplication in a later lesson.
 [^2]: This is a bit uncommon: Direct 3D and Metal use a left-handed system with y pointing upwards, and OpenGL uses a right-handed system, also with y pointing upwards. The downwards pointing y Axis is more intuitive for people that are used to work with rasterized images on the computer (e.g. if you open a graphics application like GIMP or Photoshop). On the other hand the cartesian coordinate system most of us know from our geometry lessons in school has y going upwards. The same applies to how 3D models are usually created. So we'll need to deal with that at some point.
+[^3]: Actually the function is a template, so it can also calculate with double precision, in which case the returned matrix also uses doubles.
+[^4]: Yes, view and projection matrix are constants for any given frame, so we could pre-multiply them and save some computing time. I'm not doing that here for clarity reasons and because this is an intermediate solution anyway.
+[^5]: On Windows the faces actually become stretched while you're dragging, but that's an optimization of the desktop compositor which simply scales the previous rendered image until you let go of the mouse button. macOS and most Linux compositors (e.g. Wayland) handle window resizing differently, so you may not see this effect there.

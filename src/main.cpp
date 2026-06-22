@@ -169,8 +169,7 @@ auto main() -> int
             vk::BufferUsageFlagBits::eVertexBuffer
         );
 
-        vcpp::copyDataToBuffer( logicalDevice, vertices, gpuVertexBuffer );
-
+        auto verticesTemp = vertices;
 
         while ( !glfwWindowShouldClose( window.get() ) )
         {
@@ -208,6 +207,22 @@ auto main() -> int
                     maxFramesInFlight,
                     requestedSwapchainImageCount
                 );
+
+                const auto view = glm::translate( glm::identity< glm::mat4 >(), glm::vec3{ 0.f, 0.f, -3.f } );
+
+                const auto projection = glm::perspective(
+                    glm::radians( 30.0f ),
+                    swapchainExtent.width / static_cast< float >( swapchainExtent.height ),
+                    0.1f,
+                    10.0f
+                );
+
+                for ( std::uint32_t i = 0; i < vertexCount; ++i )
+                {
+                    verticesTemp[ i ].position = projection * view * vertices[ i ].position;
+                }
+
+                vcpp::copyDataToBuffer( *logicalDevice.device, verticesTemp, gpuVertexBuffer );
 
                 framebufferSizeChanged = false;
             }
