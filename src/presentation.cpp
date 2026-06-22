@@ -19,6 +19,8 @@ License.
 
 #include "presentation.hpp"
 
+#include "memory.hpp"
+
 #include <array>
 #include <cassert>
 #include <limits>
@@ -28,11 +30,12 @@ namespace {
     auto createImageView(
         const vk::Device& logicalDevice,
         const vk::Image& image,
-        const vk::Format& format
+        const vk::Format& format,
+        const vk::ImageAspectFlags flags = vk::ImageAspectFlagBits::eColor
     ) -> vk::UniqueImageView
     {
         const auto subresourceRange = vk::ImageSubresourceRange{}
-            .setAspectMask( vk::ImageAspectFlagBits::eColor )
+            .setAspectMask( flags )
             .setBaseMipLevel( 0 )
             .setLevelCount( 1 )
             .setBaseArrayLayer( 0 )
@@ -69,14 +72,15 @@ namespace {
     auto createFramebuffers(
         const vk::Device& logicalDevice,
         const std::vector< vk::UniqueImageView >& imageViews,
+        const std::vector< vk::UniqueImageView >& depthImageViews,
         const vk::Extent2D& imageExtent,
         const vk::RenderPass& renderPass
     ) -> std::vector< vk::UniqueFramebuffer >
     {
         std::vector< vk::UniqueFramebuffer > result;
-        for( const auto& view : imageViews )
+        for( std::size_t i = 0; i < imageViews.size(); ++i )
         {
-            const std::array< vk::ImageView, 1 > attachments = { *view };
+            const std::array< vk::ImageView, 2 > attachments = { *imageViews[ i ], *depthImageViews[ i ] };
             const auto frameBufferCreateInfo = vk::FramebufferCreateInfo{}
                 .setRenderPass( renderPass )
                 .setAttachments( attachments )
@@ -114,12 +118,85 @@ namespace {
 
         return logicalDevice.createSwapchainKHRUnique( createInfo );
     }
+
+    auto createDepthImage(
+        const vk::PhysicalDevice& physicalDevice,
+        const vk::Device& logicalDevice,
+        const vk::Extent2D& imageExtent
+    ) -> vcpp::GPUImage
+    {
+        const auto createInfo = vk::ImageCreateInfo{}
+            .setImageType( vk::ImageType::e2D )
+            .setFormat( vcpp::depthFormat )
+            .setExtent( vk::Extent3D{ imageExtent.width, imageExtent.height, 1 } )
+            .setMipLevels( 1 )
+            .setArrayLayers( 1 )
+            .setSamples( vk::SampleCountFlagBits::e1 )
+            .setTiling( vk::ImageTiling::eOptimal )
+            .setUsage( vk::ImageUsageFlagBits::eDepthStencilAttachment )
+            .setSharingMode( vk::SharingMode::eExclusive )
+            .setInitialLayout( vk::ImageLayout::eUndefined );
+        auto image = logicalDevice.createImageUnique( createInfo );
+
+        const auto memoryRequirements = logicalDevice.getImageMemoryRequirements( *image );
+        const auto memoryProperties = physicalDevice.getMemoryProperties();
+
+        const auto memoryIndex = vcpp::findSuitableMemoryIndex(
+            memoryProperties,
+            memoryRequirements.memoryTypeBits,
+            vk::MemoryPropertyFlagBits::eDeviceLocal );
+
+        const auto allocateInfo = vk::MemoryAllocateInfo{}
+            .setAllocationSize( memoryRequirements.size )
+            .setMemoryTypeIndex( memoryIndex );
+
+        auto memory = logicalDevice.allocateMemoryUnique( allocateInfo );
+        logicalDevice.bindImageMemory( *image, *memory, 0u );
+
+        return { std::move( image ), std::move( memory ) };
+    }
+
+    auto createDepthImages(
+        const vk::PhysicalDevice& physicalDevice,
+        const vk::Device& logicalDevice,
+        const vk::Extent2D& imageExtent,
+        std::size_t count
+    ) -> std::vector< vcpp::GPUImage >
+    {
+        std::vector< vcpp::GPUImage > result;
+        result.reserve( count );
+        for( std::size_t i = 0; i < count; ++i )
+            result.push_back( createDepthImage( physicalDevice, logicalDevice, imageExtent ) );
+
+        return result;
+    }
+
+    auto createDepthImageViews(
+        const vk::Device& logicalDevice,
+        const std::vector< vcpp::GPUImage >& depthImages
+    ) -> std::vector< vk::UniqueImageView >
+    {
+        std::vector< vk::UniqueImageView > result;
+        result.reserve( depthImages.size() );
+        for( const auto& depthImage : depthImages )
+        {
+            result.push_back( createImageView(
+                logicalDevice,
+                *depthImage.image,
+                vcpp::depthFormat,
+                vk::ImageAspectFlagBits::eDepth
+            ) );
+        }
+
+        return result;
+    }
 }
 
 
 namespace vcpp
 {
     Swapchain::Swapchain(
+        const vk::PhysicalDevice& physicalDevice,
         const vk::Device& logicalDevice,
         const vk::RenderPass& renderPass,
         const vk::SurfaceKHR& surface,
@@ -131,7 +208,9 @@ namespace vcpp
         : m_logicalDevice{ logicalDevice }
         , m_swapchain{ createSwapchainInternal( logicalDevice, surface, surfaceFormat, imageExtent, requestedSwapchainImageCount ) }
         , m_imageViews{ createSwapchainImageViews( logicalDevice, *m_swapchain, surfaceFormat.format ) }
-        , m_framebuffers{ createFramebuffers( logicalDevice, m_imageViews, imageExtent, renderPass ) }
+        , m_depthImages{ createDepthImages( physicalDevice, logicalDevice, imageExtent, m_imageViews.size() ) }
+        , m_depthImageViews{ createDepthImageViews( logicalDevice, m_depthImages ) }
+        , m_framebuffers{ createFramebuffers( logicalDevice, m_imageViews, m_depthImageViews, imageExtent, renderPass ) }
     {
         assert( maxFramesInFlight > 0 );
         assert( requestedSwapchainImageCount > 0 );
@@ -179,6 +258,7 @@ namespace vcpp
     }
 
     auto createSwapchain(
+        const vk::PhysicalDevice& physicalDevice,
         const vk::Device& logicalDevice,
         const vk::RenderPass& renderPass,
         const vk::SurfaceKHR& surface,
@@ -189,6 +269,7 @@ namespace vcpp
     ) -> std::unique_ptr< Swapchain >
     {
         return std::make_unique< Swapchain >(
+            physicalDevice,
             logicalDevice,
             renderPass,
             surface,

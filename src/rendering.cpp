@@ -34,8 +34,9 @@ namespace vcpp
         std::uint32_t vertexCount
     ) -> void
     {
-        const auto clearValues = std::array< vk::ClearValue, 1 >{
-            vk::ClearValue{}.setColor( std::array< float, 4 >{ { 0.f, 0.f, .5f, 1.f } } )
+        const auto clearValues = std::array< vk::ClearValue, 2 >{
+            vk::ClearValue{}.setColor( std::array< float, 4 >{ { 0.f, 0.f, .5f, 1.f } } ),
+            vk::ClearValue{}.setDepthStencil( vk::ClearDepthStencilValue{ 1.f, 0 } )
         };
 
         const auto renderPassBeginInfo = vk::RenderPassBeginInfo{}

@@ -26,6 +26,15 @@ License.
 
 namespace vcpp
 {
+    constexpr auto depthFormat = vk::Format::eD32Sfloat;
+
+    struct GPUImage
+    {
+        vk::UniqueImage image;
+        vk::UniqueDeviceMemory memory;
+    };
+
+
     class Swapchain
     {
     public:
@@ -43,6 +52,7 @@ namespace vcpp
         };
 
         Swapchain(
+            const vk::PhysicalDevice& physicalDevice,
             const vk::Device& logicalDevice,
             const vk::RenderPass& renderPass,
             const vk::SurfaceKHR& surface,
@@ -69,6 +79,10 @@ namespace vcpp
         std::uint32_t m_currentFrameIndex = 0;
 
         std::vector< vk::UniqueImageView > m_imageViews;
+
+        std::vector< GPUImage > m_depthImages;
+        std::vector< vk::UniqueImageView > m_depthImageViews;
+
         std::vector< vk::UniqueFramebuffer > m_framebuffers;
 
         std::vector< vk::UniqueFence > m_inFlightFences;
@@ -77,6 +91,7 @@ namespace vcpp
     };
 
     auto createSwapchain(
+        const vk::PhysicalDevice& physicalDevice,
         const vk::Device& logicalDevice,
         const vk::RenderPass& renderPass,
         const vk::SurfaceKHR& surface,

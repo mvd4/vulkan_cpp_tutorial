@@ -19,6 +19,8 @@ License.
 
 #include "pipelines.hpp"
 
+#include "presentation.hpp"
+
 #include <vulkan/vulkan_format_traits.hpp>
 
 #include <array>
@@ -134,12 +136,29 @@ namespace vcpp
             .setAttachment( 0 )
             .setLayout( vk::ImageLayout::eColorAttachmentOptimal );
 
+        const auto depthAttachment = vk::AttachmentDescription{}
+            .setFormat( depthFormat )
+            .setSamples( vk::SampleCountFlagBits::e1 )
+            .setLoadOp( vk::AttachmentLoadOp::eClear )
+            .setStoreOp( vk::AttachmentStoreOp::eDontCare )
+            .setStencilLoadOp( vk::AttachmentLoadOp::eDontCare )
+            .setStencilStoreOp( vk::AttachmentStoreOp::eDontCare )
+            .setInitialLayout( vk::ImageLayout::eUndefined )
+            .setFinalLayout( vk::ImageLayout::eDepthStencilAttachmentOptimal );
+
+        const auto depthAttachmentRef = vk::AttachmentReference{}
+            .setAttachment( 1 )
+            .setLayout( vk::ImageLayout::eDepthStencilAttachmentOptimal );
+
+        const auto attachments = std::array< vk::AttachmentDescription, 2 >{ colorAttachment, depthAttachment };
+
         const auto subpass = vk::SubpassDescription{}
             .setPipelineBindPoint( vk::PipelineBindPoint::eGraphics )
-            .setColorAttachments( colorAttachmentRef );
+            .setColorAttachments( colorAttachmentRef )
+            .setPDepthStencilAttachment( &depthAttachmentRef );
 
         const auto renderPassCreateInfo = vk::RenderPassCreateInfo{}
-            .setAttachments( colorAttachment )
+            .setAttachments( attachments )
             .setSubpasses( subpass );
 
         return logicalDevice.createRenderPassUnique( renderPassCreateInfo );
@@ -229,6 +248,13 @@ namespace vcpp
         const auto colorBlendState = vk::PipelineColorBlendStateCreateInfo{}
             .setAttachments( colorBlendAttachment );
 
+        const auto depthStencilState = vk::PipelineDepthStencilStateCreateInfo{}
+            .setDepthTestEnable( true )
+            .setDepthWriteEnable( true )
+            .setDepthCompareOp( vk::CompareOp::eLess )
+            .setDepthBoundsTestEnable( false )
+            .setStencilTestEnable( false );
+
         const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
             .setStages( shaderStageInfos )
             .setPVertexInputState( &vertexInputState )
@@ -236,6 +262,7 @@ namespace vcpp
             .setPViewportState( &viewportState )
             .setPRasterizationState( &rasterizationState )
             .setPMultisampleState( &multisampleState )
+            .setPDepthStencilState( &depthStencilState )
             .setPColorBlendState( &colorBlendState )
             .setLayout( pipelineLayout )
             .setRenderPass( renderPass );
