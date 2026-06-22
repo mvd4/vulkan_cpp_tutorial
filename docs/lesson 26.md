@@ -117,7 +117,7 @@ auto createRenderPass(
 We've talked about attachments and subpasses quite a bit back in lesson 17. The relevant changes for a depth attachment are the format and the final layout. Everything else is the same as for the color attachment.
 
 Running this version yields an exception and a validation error:
-```
+```text
 ... VkFramebufferCreateInfo attachmentCount of 1 does not match attachmentCount of 2 of VkRenderPass ...
 ```
 
@@ -338,7 +338,7 @@ Swapchain::Swapchain(
 ```
 
 Obviously we need to adjust the constructor call in `main` accordingly as well. This version compiles, but it doesn't render anything and we get a lot of validation errors:
-```
+```text
 ... VkRenderPassBeginInfo struct has a clearValueCount of 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass ...
 ```
 
@@ -352,7 +352,7 @@ auto recordCommandBuffer(
     const vk::Framebuffer& frameBuffer,
     const vk::Extent2D& renderExtent,
     const vk::Buffer& vertexBuffer,
-    const std::uint32_t vertexCount
+    std::uint32_t vertexCount
 ) -> void
 {
     const auto clearValues = std::array< vk::ClearValue, 2 >{
