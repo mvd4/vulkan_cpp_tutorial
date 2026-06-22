@@ -24,6 +24,11 @@ License.
 #include "presentation.hpp"
 #include "rendering.hpp"
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -35,6 +40,12 @@ namespace
 {
     bool windowMinimized = false;
     bool framebufferSizeChanged = true;
+
+    struct Vertex
+    {
+        glm::vec4 position;
+        glm::vec4 color;
+    };
 
     void onFramebufferSizeChanged( [[maybe_unused]] GLFWwindow* window, int width, int height )
     {
@@ -101,54 +112,54 @@ auto main() -> int
         };
 
         constexpr size_t vertexCount = 36;
-        const std::array< float, 8 * vertexCount > vertices = {
-            // front               (red)
-            -.5f, -.5f, .5f, 1.f,  1.f, 0.f, 0.f, 1.f,
-            .5f, -.5f, .5f, 1.f,   1.f, 0.f, 0.f, 1.f,
-            -.5f, .5f, .5f, 1.f,   1.f, 0.f, 0.f, 1.f,
-            .5f, -.5f, .5f, 1.f,   1.f, 0.f, 0.f, 1.f,
-            .5f, .5f, .5f, 1.f,    1.f, 0.f, 0.f, 1.f,
-            -.5f, .5f, .5f, 1.f,   1.f, 0.f, 0.f, 1.f,
+        const std::array< Vertex, vertexCount > vertices = {
+            // front (red)
+            Vertex{ glm::vec4{ -.5f, -.5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{  .5f, -.5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f,  .5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{  .5f, -.5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{  .5f,  .5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f,  .5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 0.f, 1.f } },
 
-            // back                (yellow)
-            -.5f, -.5f, -.5f, 1.f, 1.f, 1.f, 0.f, 1.f,
-            .5f, -.5f, -.5f, 1.f,  1.f, 1.f, 0.f, 1.f,
-            -.5f, .5f, -.5f, 1.f,  1.f, 1.f, 0.f, 1.f,
-            .5f, -.5f, -.5f, 1.f,  1.f, 1.f, 0.f, 1.f,
-            .5f, .5f, -.5f, 1.f,   1.f, 1.f, 0.f, 1.f,
-            -.5f, .5f, -.5f, 1.f,  1.f, 1.f, 0.f, 1.f,
+            // back (yellow)
+            Vertex{ glm::vec4{ -.5f, -.5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{  .5f, -.5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f,  .5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{  .5f, -.5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{  .5f,  .5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f,  .5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f } },
 
-            // left                (violet)
-            -.5f, -.5f, .5f, 1.f,  1.f, 0.f, 1.f, 1.f,
-            -.5f, -.5f, -.5f, 1.f, 1.f, 0.f, 1.f, 1.f,
-            -.5f, .5f, .5f, 1.f,   1.f, 0.f, 1.f, 1.f,
-            -.5f, -.5f, .5f, 1.f,  1.f, 0.f, 1.f, 1.f,
-            -.5f, .5f, -.5f, 1.f,  1.f, 0.f, 1.f, 1.f,
-            -.5f, .5f, .5f, 1.f,   1.f, 0.f, 1.f, 1.f,
+            // left (violet)
+            Vertex{ glm::vec4{ -.5f, -.5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f, -.5f, -.5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f,  .5f, -.5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f, -.5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f,  .5f, -.5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f,  .5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f } },
 
-            // right               (green)
-            .5f, -.5f, .5f, 1.f,   0.f, 1.f, 0.f, 1.f,
-            .5f, -.5f, -.5f, 1.f,  0.f, 1.f, 0.f, 1.f,
-            .5f, .5f, -.5f, 1.f,   0.f, 1.f, 0.f, 1.f,
-            .5f, -.5f, .5f, 1.f,   0.f, 1.f, 0.f, 1.f,
-            .5f, .5f, -.5f, 1.f,   0.f, 1.f, 0.f, 1.f,
-            .5f, .5f, .5f, 1.f,    0.f, 1.f, 0.f, 1.f,
+            // right (green)
+            Vertex{ glm::vec4{  .5f, -.5f,  .5f, 1.f }, glm::vec4{ 0.f, 1.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{  .5f, -.5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{  .5f,  .5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{  .5f, -.5f,  .5f, 1.f }, glm::vec4{ 0.f, 1.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{  .5f,  .5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 0.f, 1.f } },
+            Vertex{ glm::vec4{  .5f,  .5f,  .5f, 1.f }, glm::vec4{ 0.f, 1.f, 0.f, 1.f } },
 
-            // top                 (turquoise)
-            -.5f, -.5f, .5f, 1.f,  0.f, 1.f, 1.f, 1.f,
-            .5f, -.5f, .5f, 1.f,   0.f, 1.f, 1.f, 1.f,
-            .5f, -.5f, -.5f, 1.f,  0.f, 1.f, 1.f, 1.f,
-            -.5f, -.5f, .5f, 1.f,  0.f, 1.f, 1.f, 1.f,
-            .5f, -.5f, -.5f, 1.f,  0.f, 1.f, 1.f, 1.f,
-            -.5f, -.5f, -.5f, 1.f, 0.f, 1.f, 1.f, 1.f,
+            // top (turquoise)
+            Vertex{ glm::vec4{ -.5f, -.5f,  .5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{  .5f, -.5f,  .5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{  .5f, -.5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f, -.5f,  .5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{  .5f, -.5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f, -.5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f } },
 
-            // bottom              (blue)
-            -.5f, .5f, .5f, 1.f,   0.f, 0.f, 1.f, 1.f,
-            .5f, .5f, .5f, 1.f,    0.f, 0.f, 1.f, 1.f,
-            .5f, .5f, -.5f, 1.f,   0.f, 0.f, 1.f, 1.f,
-            -.5f, .5f, .5f, 1.f,   0.f, 0.f, 1.f, 1.f,
-            .5f, .5f, -.5f, 1.f,   0.f, 0.f, 1.f, 1.f,
-            -.5f, .5f, -.5f, 1.f,  0.f, 0.f, 1.f, 1.f,
+            // bottom (blue)
+            Vertex{ glm::vec4{ -.5f,  .5f,  .5f, 1.f }, glm::vec4{ 0.f, 0.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{  .5f,  .5f,  .5f, 1.f }, glm::vec4{ 0.f, 0.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{  .5f,  .5f, -.5f, 1.f }, glm::vec4{ 0.f, 0.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f,  .5f,  .5f, 1.f }, glm::vec4{ 0.f, 0.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{  .5f,  .5f, -.5f, 1.f }, glm::vec4{ 0.f, 0.f, 1.f, 1.f } },
+            Vertex{ glm::vec4{ -.5f,  .5f, -.5f, 1.f }, glm::vec4{ 0.f, 0.f, 1.f, 1.f } },
         };
 
         const auto gpuVertexBuffer = vcpp::createGPUBuffer(

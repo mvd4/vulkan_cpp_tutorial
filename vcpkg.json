@@ -1,8 +1,9 @@
 {
   "name": "vulkan-cpp-tutorial",
-  "version-string": "lesson_13",
+  "version-string": "lesson_25",
   "dependencies": [
     "glfw3",
+    "glm",
     "vulkan"
   ]
 }
