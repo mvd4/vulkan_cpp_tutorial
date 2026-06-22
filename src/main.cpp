@@ -169,6 +169,11 @@ auto main() -> int
             vk::BufferUsageFlagBits::eVertexBuffer
         );
 
+        auto model = glm::identity< glm::mat4 >();
+        auto view = glm::identity< glm::mat4 >();
+        auto projection = glm::identity< glm::mat4 >();
+        float rotationAngle = 0.f;
+
         auto verticesTemp = vertices;
 
         while ( !glfwWindowShouldClose( window.get() ) )
@@ -208,24 +213,27 @@ auto main() -> int
                     requestedSwapchainImageCount
                 );
 
-                const auto view = glm::translate( glm::identity< glm::mat4 >(), glm::vec3{ 0.f, 0.f, -3.f } );
+                view = glm::translate( glm::identity< glm::mat4 >(), glm::vec3{ 0.f, 0.f, -3.f } );
 
-                const auto projection = glm::perspective(
+                projection = glm::perspective(
                     glm::radians( 30.0f ),
                     swapchainExtent.width / static_cast< float >( swapchainExtent.height ),
                     0.1f,
                     10.0f
                 );
 
-                for ( std::uint32_t i = 0; i < vertexCount; ++i )
-                {
-                    verticesTemp[ i ].position = projection * view * vertices[ i ].position;
-                }
-
-                vcpp::copyDataToBuffer( *logicalDevice.device, verticesTemp, gpuVertexBuffer );
-
                 framebufferSizeChanged = false;
             }
+
+            model = glm::rotate( glm::identity< glm::mat4 >(), rotationAngle, glm::vec3{ 0.f, 1.f, 0.f } );
+
+            for ( std::uint32_t i = 0; i < vertexCount; ++i )
+            {
+                verticesTemp[ i ].position = projection * view * model * vertices[ i ].position;
+            }
+
+            vcpp::copyDataToBuffer( *logicalDevice.device, verticesTemp, gpuVertexBuffer );
+            rotationAngle += 0.01f;
 
             try
             {

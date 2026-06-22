@@ -270,6 +270,71 @@ We actually wouldn't need to recreate the view matrix with every size change, bu
 
 That version of our application indeed shows us the full cube in perspective, only that it seems to be missing its red front face and we still can look inside it. Strange. Well, at least the faces remain squares if we resize the window[^5].
 
+Let's ignore this issue for a little longer and implement a first example of the last remaining transformation: as said, the model transformation places the individual objects at the right position in our scene and orients them appropriately. It also applies individual scaling to the object if necessary. In our case the cube is already placed conveniently so that we can see it well. How about a bit of rotation? And, to make it a bit more interesting: how about an animation rather than just a static one-time modification?
+
+The utility we're looking for is this one:
+
+```C++
+glm::mat4 glm::rotate( const glm::mat4& m, float angle, const glm::vec3& v );
+```
+
+- `m` is the matrix that is to be rotated, same as for `glm::translate`
+- `angle` is the rotation angle in radians
+- `v` is the rotation axis. According to the documentation this is recommended to be a normalized vector
+
+So we need a rotation angle that is changing slightly with each pass of the render loop. We also need to move the application of all transformations out of the window size handler, because now the transformation is different for every frame. This might look something like that:
+
+``` C++
+auto model = glm::identity< glm::mat4 >();
+auto view = glm::identity< glm::mat4 >();
+auto projection = glm::identity< glm::mat4 >();
+float rotationAngle = 0.f;
+
+auto verticesTemp = vertices;
+
+while ( !glfwWindowShouldClose( window.get() ) )
+{
+    ...
+
+    if ( framebufferSizeChanged )
+    {
+        ...
+
+        view = glm::translate( glm::identity< glm::mat4 >(), glm::vec3{ 0.f, 0.f, -3.f } );
+
+        projection = glm::perspective(
+            glm::radians( 30.0f ),
+            swapChainExtent.width / static_cast< float >( swapChainExtent.height ),
+            0.1f,
+            10.0f );
+
+        framebufferSizeChanged = false;
+    }
+
+    ...
+
+    model = glm::rotate( glm::identity< glm::mat4 >(), rotationAngle, glm::vec3{ 0.f, 1.f, 0.f } );
+
+    for ( std::uint32_t i = 0; i < vertexCount; ++i )
+    {
+        verticesTemp[ i ].position = projection * view * model * vertices[ i ].position;
+    }
+
+    vcpp::copyDataToBuffer( *logicalDevice.device, verticesTemp, gpuVertexBuffer );
+    rotationAngle += 0.01f;
+
+    ...
+}
+```
+
+Be sure to remove the variables declarations for view and projection matrix in the window size handler code, otherwise you will shadow the ones now declared outside the loop and would never actually apply any view and projection transformation to the vertices.
+
+Running this version shows that the rotation works, but the cube is rendered in a pretty strange way. Some faces constantly seem to change color and we still don't ever see the red front.
+
+![Screenshot showing a perspective rendering of the cube, but with errors. We can look inside and some faces are rendered strangely](images/Screenshot_4_Cube_2.png "Fig. 4: Now we have a cube, but it still looks a bit weird")
+
+Nevertheless, I want to leave it at that for today - we've definitely made a big step towards rendering a real 3D scene today. Next time we'll fix this issue and also optimize our render loop a bit.
+
 ---
 
 [^1]: If this sounds a bit wasteful to you, you are right. We'll take care of the duplication in a later lesson.
