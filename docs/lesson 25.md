@@ -3,7 +3,7 @@ So far all that we've created is one flat triangle, which is still pretty far fr
 
 Our vertices already have three dimensional coordinates, only that we're not using the third dimension yet. So we should be able to create a three-dimensional object without any changes to the pipeline. Let's modify our vertex buffer to contain a cube:
 
-``` C++
+```cpp
 constexpr size_t vertexCount = 36;
 const std::array< float, 8 * vertexCount > vertices = {
     // front               (red)
@@ -105,7 +105,7 @@ Note the `glm::glm` namespaced target name. Linking against a bare `glm` would m
 
 Finally, add the corresponding `#includes` to `main.cpp`:
 
-```C++
+```cpp
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
@@ -117,7 +117,7 @@ GLM - like glfw - was originally written for OpenGL. Therefore we need to add so
 
 GLM provides types for vectors and matrices that are compatible with Vulkan. So the next step is to modify our vertex array to make use of GLM's `vec4` type. While we're at it, let's also wrap the position and color of a vertex in a small struct so the layout of the array becomes clearer:
 
-``` C++
+```cpp
 struct Vertex
 {
     glm::vec4 position;
@@ -129,60 +129,60 @@ struct Vertex
 constexpr size_t vertexCount = 36;
 const std::array< Vertex, vertexCount > vertices = {
     // front (red)
-    Vertex{ glm::vec4{ -.5f, -.5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{  .5f, -.5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f,  .5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{  .5f, -.5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{  .5f,  .5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f,  .5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 0.f, 1.f } },
+    Vertex{ { -.5f, -.5f,  .5f, 1.f }, { 1.f, 0.f, 0.f, 1.f } },
+    Vertex{ {  .5f, -.5f,  .5f, 1.f }, { 1.f, 0.f, 0.f, 1.f } },
+    Vertex{ { -.5f,  .5f,  .5f, 1.f }, { 1.f, 0.f, 0.f, 1.f } },
+    Vertex{ {  .5f, -.5f,  .5f, 1.f }, { 1.f, 0.f, 0.f, 1.f } },
+    Vertex{ {  .5f,  .5f,  .5f, 1.f }, { 1.f, 0.f, 0.f, 1.f } },
+    Vertex{ { -.5f,  .5f,  .5f, 1.f }, { 1.f, 0.f, 0.f, 1.f } },
 
     // back (yellow)
-    Vertex{ glm::vec4{ -.5f, -.5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{  .5f, -.5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f,  .5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{  .5f, -.5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{  .5f,  .5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f,  .5f, -.5f, 1.f }, glm::vec4{ 1.f, 1.f, 0.f, 1.f } },
+    Vertex{ { -.5f, -.5f, -.5f, 1.f }, { 1.f, 1.f, 0.f, 1.f } },
+    Vertex{ {  .5f, -.5f, -.5f, 1.f }, { 1.f, 1.f, 0.f, 1.f } },
+    Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 1.f, 1.f, 0.f, 1.f } },
+    Vertex{ {  .5f, -.5f, -.5f, 1.f }, { 1.f, 1.f, 0.f, 1.f } },
+    Vertex{ {  .5f,  .5f, -.5f, 1.f }, { 1.f, 1.f, 0.f, 1.f } },
+    Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 1.f, 1.f, 0.f, 1.f } },
 
     // left (violet)
-    Vertex{ glm::vec4{ -.5f, -.5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f, -.5f, -.5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f,  .5f, -.5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f, -.5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f,  .5f, -.5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f,  .5f,  .5f, 1.f }, glm::vec4{ 1.f, 0.f, 1.f, 1.f } },
+    Vertex{ { -.5f, -.5f,  .5f, 1.f }, { 1.f, 0.f, 1.f, 1.f } },
+    Vertex{ { -.5f, -.5f, -.5f, 1.f }, { 1.f, 0.f, 1.f, 1.f } },
+    Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 1.f, 0.f, 1.f, 1.f } },
+    Vertex{ { -.5f, -.5f,  .5f, 1.f }, { 1.f, 0.f, 1.f, 1.f } },
+    Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 1.f, 0.f, 1.f, 1.f } },
+    Vertex{ { -.5f,  .5f,  .5f, 1.f }, { 1.f, 0.f, 1.f, 1.f } },
 
     // right (green)
-    Vertex{ glm::vec4{  .5f, -.5f,  .5f, 1.f }, glm::vec4{ 0.f, 1.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{  .5f, -.5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{  .5f,  .5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{  .5f, -.5f,  .5f, 1.f }, glm::vec4{ 0.f, 1.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{  .5f,  .5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 0.f, 1.f } },
-    Vertex{ glm::vec4{  .5f,  .5f,  .5f, 1.f }, glm::vec4{ 0.f, 1.f, 0.f, 1.f } },
+    Vertex{ {  .5f, -.5f,  .5f, 1.f }, { 0.f, 1.f, 0.f, 1.f } },
+    Vertex{ {  .5f, -.5f, -.5f, 1.f }, { 0.f, 1.f, 0.f, 1.f } },
+    Vertex{ {  .5f,  .5f, -.5f, 1.f }, { 0.f, 1.f, 0.f, 1.f } },
+    Vertex{ {  .5f, -.5f,  .5f, 1.f }, { 0.f, 1.f, 0.f, 1.f } },
+    Vertex{ {  .5f,  .5f, -.5f, 1.f }, { 0.f, 1.f, 0.f, 1.f } },
+    Vertex{ {  .5f,  .5f,  .5f, 1.f }, { 0.f, 1.f, 0.f, 1.f } },
 
     // top (turquoise)
-    Vertex{ glm::vec4{ -.5f, -.5f,  .5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{  .5f, -.5f,  .5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{  .5f, -.5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f, -.5f,  .5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{  .5f, -.5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f, -.5f, -.5f, 1.f }, glm::vec4{ 0.f, 1.f, 1.f, 1.f } },
+    Vertex{ { -.5f, -.5f,  .5f, 1.f }, { 0.f, 1.f, 1.f, 1.f } },
+    Vertex{ {  .5f, -.5f,  .5f, 1.f }, { 0.f, 1.f, 1.f, 1.f } },
+    Vertex{ {  .5f, -.5f, -.5f, 1.f }, { 0.f, 1.f, 1.f, 1.f } },
+    Vertex{ { -.5f, -.5f,  .5f, 1.f }, { 0.f, 1.f, 1.f, 1.f } },
+    Vertex{ {  .5f, -.5f, -.5f, 1.f }, { 0.f, 1.f, 1.f, 1.f } },
+    Vertex{ { -.5f, -.5f, -.5f, 1.f }, { 0.f, 1.f, 1.f, 1.f } },
 
     // bottom (blue)
-    Vertex{ glm::vec4{ -.5f,  .5f,  .5f, 1.f }, glm::vec4{ 0.f, 0.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{  .5f,  .5f,  .5f, 1.f }, glm::vec4{ 0.f, 0.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{  .5f,  .5f, -.5f, 1.f }, glm::vec4{ 0.f, 0.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f,  .5f,  .5f, 1.f }, glm::vec4{ 0.f, 0.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{  .5f,  .5f, -.5f, 1.f }, glm::vec4{ 0.f, 0.f, 1.f, 1.f } },
-    Vertex{ glm::vec4{ -.5f,  .5f, -.5f, 1.f }, glm::vec4{ 0.f, 0.f, 1.f, 1.f } },
+    Vertex{ { -.5f,  .5f,  .5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
+    Vertex{ {  .5f,  .5f,  .5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
+    Vertex{ {  .5f,  .5f, -.5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
+    Vertex{ { -.5f,  .5f,  .5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
+    Vertex{ {  .5f,  .5f, -.5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
+    Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
 };
 ```
 
-We have to explicitly spell out the `Vertex` and `glm::vec4` constructors because both are marked as `explicit`. Quite a lot of typing, I know. The good news is that this layout is binary-compatible with our existing pipeline setup: a `Vertex` is just two `vec4`s back to back, which matches the two `R32G32B32A32_SFLOAT` attributes we configured earlier. So compiling and running this program should work fine.
+Quite a lot of typing, I know. The good news is that this layout is binary-compatible with our existing pipeline setup: a `Vertex` is just two `vec4`s back to back, which matches the two `R32G32B32A32_SFLOAT` attributes we configured earlier. So compiling and running this program should work fine.
 
 As said, there are two common types of projections, and GLM offers utilities for both of them. We're interested in a perspective transformation, so our go-to function is this one[^3]:
 
-```C++
+```cpp
 glm::mat4 glm::perspective( float fovy, float aspect, float zNear, float zFar );
 ```
 
@@ -192,7 +192,7 @@ glm::mat4 glm::perspective( float fovy, float aspect, float zNear, float zFar );
 
 Now that we know how to create the transformation matrix, the only thing left to do is to multiply each of the vertex coordinates with it before we send them off to the GPU. However, we need to redo that every time the aspect ratio of the window changes, because that changes the transformation. So the right place to do that is probably where we handle window size changes anyway. We cannot directly modify the vertices though since we always need to retain the orignal coordinates and multiply those with the transformation matrix. So we create a copy of the vertices, transform the coordinates of the copy and send that one to the GPU:
 
-```C++
+```cpp
 ...
 auto verticesTemp = vertices;
 
@@ -215,7 +215,7 @@ while ( !glfwWindowShouldClose( window.get() ) )
             verticesTemp[ i ].position = projection * vertices[ i ].position;
         }
 
-        vcpp::copyDataToBuffer( *logicalDevice.device, verticesTemp, gpuVertexBuffer );
+        vcpp::copyDataToBuffer( logicalDevice, verticesTemp, gpuVertexBuffer );
 
         framebufferSizeChanged = false;
     }
@@ -242,7 +242,7 @@ v_device = M_proj * M_view * M_model * v_model
 
 We have to decide now whether our cube should be located somewhere other than the origin, or whether our camera should look at the scene from elsewhere. In any case, the transformation that we'd need is a translation and GLM again supports us with a utility function:
 
-```C++
+```cpp
 glm::mat4 glm::translate( const glm::mat4& m, const glm::vec3& v );
 ```
 
@@ -251,12 +251,12 @@ glm::mat4 glm::translate( const glm::mat4& m, const glm::vec3& v );
 
 Let's say we want to move our camera back a bit to be able to see the cube in its entirety. So we need to implement a view transformation which translates the object in the exact opposite direction, i.e. towards negative z values:
 
-```C++
+```cpp
 const auto view = glm::translate( glm::identity< glm::mat4 >(), glm::vec3{ 0.f, 0.f, -3.f } );
 
 const auto projection = glm::perspective(
     glm::radians( 30.0f ),
-    swapChainExtent.width / static_cast< float >( swapChainExtent.height ),
+    swapchainExtent.width / static_cast< float >( swapchainExtent.height ),
     0.1f,
     10.0f );
 
@@ -274,7 +274,7 @@ Let's ignore this issue for a little longer and implement a first example of the
 
 The utility we're looking for is this one:
 
-```C++
+```cpp
 glm::mat4 glm::rotate( const glm::mat4& m, float angle, const glm::vec3& v );
 ```
 
@@ -284,7 +284,7 @@ glm::mat4 glm::rotate( const glm::mat4& m, float angle, const glm::vec3& v );
 
 So we need a rotation angle that is changing slightly with each pass of the render loop. We also need to move the application of all transformations out of the window size handler, because now the transformation is different for every frame. This might look something like that:
 
-``` C++
+```cpp
 auto model = glm::identity< glm::mat4 >();
 auto view = glm::identity< glm::mat4 >();
 auto projection = glm::identity< glm::mat4 >();
@@ -304,7 +304,7 @@ while ( !glfwWindowShouldClose( window.get() ) )
 
         projection = glm::perspective(
             glm::radians( 30.0f ),
-            swapChainExtent.width / static_cast< float >( swapChainExtent.height ),
+            swapchainExtent.width / static_cast< float >( swapchainExtent.height ),
             0.1f,
             10.0f );
 
@@ -320,7 +320,7 @@ while ( !glfwWindowShouldClose( window.get() ) )
         verticesTemp[ i ].position = projection * view * model * vertices[ i ].position;
     }
 
-    vcpp::copyDataToBuffer( *logicalDevice.device, verticesTemp, gpuVertexBuffer );
+    vcpp::copyDataToBuffer( logicalDevice, verticesTemp, gpuVertexBuffer );
     rotationAngle += 0.01f;
 
     ...
@@ -328,6 +328,8 @@ while ( !glfwWindowShouldClose( window.get() ) )
 ```
 
 Be sure to remove the variables declarations for view and projection matrix in the window size handler code, otherwise you will shadow the ones now declared outside the loop and would never actually apply any view and projection transformation to the vertices.
+
+One thing worth being aware of: we now overwrite the single, shared vertex buffer with `copyDataToBuffer` on every iteration of the render loop. Because we keep several frames in flight, the GPU may still be reading that buffer to render a previous frame at the very moment the CPU starts writing the next frame's data into it. That's a genuine data race, and a validation layer with synchronization validation enabled would rightfully complain about it. We get away with it here because the cube rotates slowly and the artifacts are easy to miss, but this is not something you'd want to ship. Properly fixing it is beyond what I want to tackle right now, just keep in the back of your mind that this shortcut is on borrowed time.
 
 Running this version shows that the rotation works, but the cube is rendered in a pretty strange way. Some faces constantly seem to change color and we still don't ever see the red front.
 
