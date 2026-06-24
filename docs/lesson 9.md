@@ -1,4 +1,4 @@
-# Descriptors
+# Lesson 9: Descriptors
 
 Before we continue, let's do a quick recap on where we are at right now:
 
