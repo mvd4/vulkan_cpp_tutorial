@@ -1,4 +1,4 @@
-# Staging Buffers
+# Lesson 12: Staging Buffers
 
 I know that most of you will probably be itching to finally move on to graphics programming. And we'll be getting there soon, I promise. But before we do that I want to introduce one important concept that you will definitely encounter at some point.
 
