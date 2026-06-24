@@ -1,4 +1,4 @@
-# Some Cleanup
+# Lesson 12a: Some Cleanup
 Alright, minor change of plans again: this one is not yet going to be our start into the world of graphics programming after all. In fact we won't make any progress in terms of Vulkan programming whatsoever today. Instead I decided to slide in a chunk of code cleanup to improve the code structure that should make our future work much easier.
 
 So far we've added all our C++ code to that one single source code file. I think that was okay up to now to keep the project simple and focus on the functionality itself. But looking at `main.cpp` now I think it's pretty obvious that this approach has reached its limits. If we were to add even more code here things would get really messy very soon. And as mentioned before: a graphics pipeline is considerably more complex than a compute one. So let's do a bit of housekeeping before we move on.
