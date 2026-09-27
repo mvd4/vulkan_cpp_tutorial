@@ -224,7 +224,10 @@ namespace vcpp
             m_readyForRenderingSemaphores.push_back( logicalDevice.createSemaphoreUnique(
                 vk::SemaphoreCreateInfo{}
             ) );
+        }
 
+        for ( const auto& v : m_imageViews )
+        {
             m_readyForPresentingSemaphores.push_back( logicalDevice.createSemaphoreUnique(
                 vk::SemaphoreCreateInfo{}
             ) );
@@ -250,7 +253,7 @@ namespace vcpp
             *m_framebuffers[ swapchainImageIndex ],
             *m_inFlightFences[ m_currentFrameIndex ],
             *m_readyForRenderingSemaphores[ m_currentFrameIndex ],
-            *m_readyForPresentingSemaphores[ m_currentFrameIndex ]
+            *m_readyForPresentingSemaphores[ swapchainImageIndex ]
         };
 
         m_currentFrameIndex = ( m_currentFrameIndex + 1 ) % m_inFlightFences.size();

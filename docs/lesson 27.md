@@ -82,9 +82,7 @@ if constexpr ( isDebugBuild() )
     }
 }
 ```
-`validationLayerName` is just a file-local `constexpr auto validationLayerName = "VK_LAYER_KHRONOS_validation";`, so we no longer have to repeat the literal. `isLayerAvailable` and `isExtensionAvailable` are one-liners over the `layers` and extension collections we already enumerate at the top of the function - take a look at `devices.cpp` if you're curious, there's nothing surprising in them. Both take a `std::string_view`, which is what lets us pass a plain string literal at the call site and still compare it against the fixed-size character arrays that Vulkan hands us in `layerName` and `extensionName`.
-
-Note the `if constexpr`: since `isDebugBuild()` is a compile-time constant, this guarantees that none of the block survives into a release build, and it matches how we already handle `isMacOS()` a few lines further down.
+`validationLayerName` is just a file-local `constexpr auto validationLayerName = "VK_LAYER_KHRONOS_validation";`, so we no longer have to repeat the literal. `isLayerAvailable` and `isExtensionAvailable` are one-liners over the `layers` and extension collections we already enumerate at the top of the function - take a look at `devices.cpp` if you're curious, there's nothing surprising in them.
 
 Now that we have `isExtensionAvailable`, I also used it to replace the hand-written search in `getRequiredDeviceExtensions` further down in the file. And note that we changed the conditions for two extensions along the way: `VK_EXT_debug_utils` used to be enabled unconditionally and is now limited to debug builds, and `VK_EXT_validation_features` - also unconditional before - now additionally requires the validation layer to actually be present.
 
@@ -122,6 +120,70 @@ Note that `validationFeatures` only stores a pointer to `validationFeaturesToEna
 You'll notice one more change in that snippet: the macOS portability flag now goes into a local `instanceCreateFlags` first. Previously we created an empty `instanceCreateInfo` at the top of the function just so that the `if constexpr` block could call `setFlags` on it, and then filled in the rest further down. Collecting the flag separately lets us declare and populate `instanceCreateInfo` in a single place.
 
 Building and running this does yield errors, but - at least on my machine - they're actually not our semaphore mix-up: all I get is a `WRITE_AFTER_READ` hazard that mentions `vkQueueSubmit`, `vkCmdBeginRenderPass` and `vkAcquireNextImageKHR`.
+
+So apparently we _do_ have a few synchronization bugs in the codebase. That's great, the validation already paid off. But those are not the error I talked about in the beginning. Why aren't we seeing that issue?
+
+The reason is that I incidentally have the same number of swapchain images and frames in flight. Apparently, the driver returned exactly the minimum number of images that the program requested, which happens to be the same as the frames in flight. In this case there's no problem because we have the right number of semaphores and the indices also match. However, if you change `requestedSwapchainImageCount` to something greater than 2, you should see this validation error among the other ones:
+
+```text
+Swapchain image 1 was presented but was not re-acquired, so VkSemaphore 0x220000000022 may still be in use and cannot be safely reused with image index 0.
+```
+
+Alright, now that we have a clear line of sight on the error, let's fix this one first.
+
+## Fixing the swapchain synchronization
+As mentioned above, we actually need one semaphore for each swapchain image. So let's modify our `Swapchain` constructor implementation:
+```cpp
+// presentation.cpp
+Swapchain::Swapchain(
+    ...
+)
+    ...
+{
+    assert( maxFramesInFlight > 0 );
+    assert( requestedSwapchainImageCount > 0 );
+
+    for( std::uint32_t f = 0; f < maxFramesInFlight; ++f )
+    {
+        m_inFlightFences.push_back( logicalDevice.createFenceUnique(
+            vk::FenceCreateInfo{}.setFlags( vk::FenceCreateFlagBits::eSignaled )
+        ) );
+
+        m_readyForRenderingSemaphores.push_back( logicalDevice.createSemaphoreUnique(
+            vk::SemaphoreCreateInfo{}
+        ) );
+    }
+
+    for ( const auto& v : m_imageViews )
+    {
+        m_readyForPresentingSemaphores.push_back( logicalDevice.createSemaphoreUnique(
+            vk::SemaphoreCreateInfo{}
+        ) );
+    }
+}
+```
+
+Since our semaphore collections are already `std::vector`s, all we have to do is to create the correct number of semaphores for protecting the swapchain images and the frames we render into, and add them to the appropriate collection.
+
+The only other thing we have to do now is to return the correct index for each frame:
+```cpp
+// presentation.cpp
+auto Swapchain::getNextFrame() -> FrameData
+{
+    ...
+    const auto frame = FrameData{
+        m_currentFrameIndex,
+        swapchainImageIndex,
+        *m_framebuffers[ swapchainImageIndex ],
+        *m_inFlightFences[ m_currentFrameIndex ],
+        *m_readyForRenderingSemaphores[ m_currentFrameIndex ],
+        *m_readyForPresentingSemaphores[ swapchainImageIndex ]
+    };
+    ...
+}
+```
+
+If you run this version, you should no longer get the semaphore-related validation errors.
 
 
 ---
