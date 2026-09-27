@@ -161,12 +161,16 @@ auto main() -> int
             Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
         };
 
-        const auto gpuVertexBuffer = vcpp::createGPUBuffer(
-            physicalDevice,
-            logicalDevice,
-            sizeof( vertices ),
-            vk::BufferUsageFlagBits::eVertexBuffer
-        );
+        auto gpuVertexBuffers = std::vector< vcpp::GPUBuffer >{};
+        for ( std::uint32_t f = 0; f < maxFramesInFlight; ++f )
+        {
+            gpuVertexBuffers.push_back( vcpp::createGPUBuffer(
+                physicalDevice,
+                logicalDevice,
+                sizeof( vertices ),
+                vk::BufferUsageFlagBits::eVertexBuffer
+            ) );
+        }
 
         auto model = glm::identity< glm::mat4 >();
         auto view = glm::identity< glm::mat4 >();
@@ -232,12 +236,14 @@ auto main() -> int
                 verticesTemp[ i ].position = projection * view * model * vertices[ i ].position;
             }
 
-            vcpp::copyDataToBuffer( logicalDevice, verticesTemp, gpuVertexBuffer );
             rotationAngle += 0.01f;
 
             try
             {
                 const auto frame = swapchain->getNextFrame();
+                const auto& gpuVertexBuffer = gpuVertexBuffers[ frame.frameInFlightIndex ];
+
+                vcpp::copyDataToBuffer( logicalDevice, verticesTemp, gpuVertexBuffer );
 
                 vcpp::recordCommandBuffer(
                     commandBuffers[ frame.frameInFlightIndex ],

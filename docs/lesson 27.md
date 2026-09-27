@@ -300,6 +300,70 @@ auto Swapchain::getNextFrame() -> FrameData
 ```
 This doesn't change the observable behaviour of our program, but it makes `getNextFrame` correct on its own terms instead of relying on a caller that happens to throw the whole `Swapchain` away.
 
+
+## One vertex buffer per frame in flight
+With the validation layer happy again, it might seem we can call it a day. But there is one more hazard in our code which the validation layer can never tell us about. To see it, let's look at what our render loop does with the vertex data:
+```cpp
+// main.cpp
+for ( std::uint32_t i = 0; i < vertexCount; ++i )
+{
+    verticesTemp[ i ].position = projection * view * model * vertices[ i ].position;
+}
+
+vcpp::copyDataToBuffer( logicalDevice, verticesTemp, gpuVertexBuffer );
+```
+We transform all our vertices on the CPU and then copy the result into the one single vertex buffer that we created before the loop. But that is obviously the same buffer that the command buffer we submitted in the _previous_ iteration binds and reads from.
+
+Remember that `queue.submit` doesn't wait for anything: it hands the command buffer over to the GPU and returns immediately. So by the time we're back at the top of the loop, the GPU may very well still be busy drawing the previous frame - which means it may still be reading from that buffer. And there we are, overwriting it. That's another write-after-read hazard, the very same class of bug as the two we just fixed. The synchronization validation cannot warn us about it because it doesn't see our write.
+
+So how do we fix it? The standard answer is to give each frame in flight its own buffer, in the same way we already do for the command buffers, the fences and the `readyForRendering` semaphores. So let's create one buffer per frame in flight instead of a single one:
+```cpp
+// main.cpp
+auto gpuVertexBuffers = std::vector< vcpp::GPUBuffer >{};
+for ( std::uint32_t f = 0; f < maxFramesInFlight; ++f )
+{
+    gpuVertexBuffers.push_back( vcpp::createGPUBuffer(
+        physicalDevice,
+        logicalDevice,
+        sizeof( vertices ),
+        vk::BufferUsageFlagBits::eVertexBuffer
+    ) );
+}
+```
+`GPUBuffer` owns its handles through `vk::UniqueBuffer` and `vk::UniqueDeviceMemory`, so it is move-only - which is fine, `push_back` moves the temporary returned by `createGPUBuffer` into the vector, and the buffers are destroyed in the right order when `gpuVertexBuffers` goes out of scope at the end of `main`.
+
+And in the render loop we move the copy into the `try` block, where we know the frame index, and target the buffer that belongs to it:
+```cpp
+// main.cpp
+rotationAngle += 0.01f;
+
+try
+{
+    const auto frame = swapchain->getNextFrame();
+    const auto& gpuVertexBuffer = gpuVertexBuffers[ frame.frameInFlightIndex ];
+
+    vcpp::copyDataToBuffer( logicalDevice, verticesTemp, gpuVertexBuffer );
+
+    vcpp::recordCommandBuffer(
+        commandBuffers[ frame.frameInFlightIndex ],
+        *pipeline,
+        *renderPass,
+        frame.framebuffer,
+        swapchainExtent,
+        *gpuVertexBuffer.buffer,
+        vertexCount
+    );
+
+    ...
+}
+```
+Note that we bind the frame's buffer to a local reference called `gpuVertexBuffer`, so neither the `copyDataToBuffer` nor the `recordCommandBuffer` call below it has to change at all.
+
+There's a pattern here that's worth taking away from this lesson, because it will come up again and again: every resource that the CPU writes to while the GPU may still be using it needs to exist once per frame in flight. Resources that are only ever read by the GPU - our shader modules, the pipeline, the render pass - can happily be shared.[^2]
+
+Build and run this version and you should see the same rotating cube as before, without any validation errors. Our synchronization is now sound, and with that out of the way we can finally get to improving the render loop itself - which is what the next lesson will be about.
+
 ---
 
 [^1]: `VK_EXT_validation_features` - and with it `vk::ValidationFeaturesEXT` - has been deprecated in favour of `VK_EXT_layer_settings`, which provides a more general mechanism for configuring the behaviour of any layer, not just the validation layer. The older extension is still widely supported and keeps us consistent with what we've been requesting since lesson 13, so we'll stick with it here. Just be aware of its successor if you're working against a recent SDK.
+[^2]: The alternative to duplicating the buffer is to keep one device-local vertex buffer and upload into it from a per-frame staging buffer with `vkCmdCopyBuffer`. That has the advantage of making the transfer a real command - so synchronization validation can see it - and device-local memory is faster for the GPU to read. But it also needs a per-frame staging buffer plus explicit barriers between transfer and vertex input, so it's more work. We'll get to staging buffers later in the tutorial.
