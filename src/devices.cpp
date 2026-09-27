@@ -20,11 +20,14 @@ License.
 #include "devices.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
+
 
 namespace {
 
@@ -68,6 +71,40 @@ namespace {
     #else
             false;
     #endif
+    }
+
+    constexpr auto isDebugBuild() -> bool
+    {
+        return
+    #if defined NDEBUG
+            false;
+    #else
+            true;
+    #endif
+    }
+
+    constexpr auto validationLayerName = "VK_LAYER_KHRONOS_validation";
+
+    auto isLayerAvailable(
+        const std::vector< vk::LayerProperties >& availableLayers,
+        std::string_view layerName
+    ) -> bool
+    {
+        return std::ranges::any_of(
+            availableLayers,
+            [ layerName ]( const vk::LayerProperties& l ) { return layerName == l.layerName; }
+        );
+    }
+
+    auto isExtensionAvailable(
+        const std::vector< vk::ExtensionProperties >& availableExtensions,
+        std::string_view extensionName
+    ) -> bool
+    {
+        return std::ranges::any_of(
+            availableExtensions,
+            [ extensionName ]( const vk::ExtensionProperties& e ) { return extensionName == e.extensionName; }
+        );
     }
 
     auto findBestPhysicalDevice( const std::vector< vk::PhysicalDevice >& devices ) -> vk::PhysicalDevice
@@ -127,30 +164,69 @@ namespace vcpp
             .setEngineVersion( 1u )
             .setApiVersion( VK_API_VERSION_1_1 );
 
-        const auto layersToEnable = std::vector< const char* >{
-            "VK_LAYER_KHRONOS_validation"
-        };
+        auto layersToEnable = std::vector< const char* >{};
+        auto extensionsToEnable = std::vector< const char* >{};
+        auto enableSynchronizationValidation = false;
 
-        auto extensionsToEnable = std::vector< const char* >{
-            VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-            VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME };
+        if constexpr ( isDebugBuild() )
+        {
+            const auto enableValidation = isLayerAvailable( layers, validationLayerName );
+
+            if ( enableValidation )
+            {
+                layersToEnable.push_back( validationLayerName );
+                std::cout << "Validation layer enabled\n\n";
+            }
+
+            const auto validationLayerExtensions = enableValidation
+                ? vk::enumerateInstanceExtensionProperties( std::string{ validationLayerName } )
+                : std::vector< vk::ExtensionProperties >{};
+
+            if (
+                isExtensionAvailable( instanceExtensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME ) ||
+                isExtensionAvailable( validationLayerExtensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME )
+            )
+            {
+                extensionsToEnable.push_back( VK_EXT_DEBUG_UTILS_EXTENSION_NAME );
+            }
+
+            enableSynchronizationValidation =
+                enableValidation &&
+                isExtensionAvailable( validationLayerExtensions, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME );
+
+            if ( enableSynchronizationValidation )
+            {
+                extensionsToEnable.push_back( VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME );
+                std::cout << "Synchronization validation enabled\n\n";
+            }
+        }
 
         for ( const auto& e : requiredExtensions )
             extensionsToEnable.push_back( e.c_str() );
 
-        auto instanceCreateInfo = vk::InstanceCreateInfo{};
+        auto instanceCreateFlags = vk::InstanceCreateFlags{};
 
         // for newer versions of the sdk on macos we have to enable the portability extension
         if constexpr ( isMacOS() && getVulkanSDKVersion() >= VersionNumber{ 1, 3, 216 } )
         {
             extensionsToEnable.push_back( VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME );
-            instanceCreateInfo.setFlags( vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR );
+            instanceCreateFlags |= vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
         }
 
-        instanceCreateInfo
+        constexpr auto validationFeaturesToEnable = std::array{
+            vk::ValidationFeatureEnableEXT::eSynchronizationValidation
+        };
+        const auto validationFeatures = vk::ValidationFeaturesEXT{}
+            .setEnabledValidationFeatures( validationFeaturesToEnable );
+
+        auto instanceCreateInfo = vk::InstanceCreateInfo{}
+            .setFlags( instanceCreateFlags )
             .setPApplicationInfo( &appInfo )
             .setPEnabledLayerNames( layersToEnable )
             .setPEnabledExtensionNames( extensionsToEnable );
+
+        if ( enableSynchronizationValidation )
+            instanceCreateInfo.setPNext( &validationFeatures );
 
         return vk::createInstanceUnique( instanceCreateInfo );
     }
@@ -229,24 +305,16 @@ namespace vcpp
         const std::vector< vk::ExtensionProperties >& availableExtensions
     ) -> std::vector< const char* >
     {
-        // extension name strings need to be static, because we're returning a vector with pointers to the underlying char arrays
-        static const std::string compatibilityExtensionName = "VK_KHR_portability_subset";
+        // we're returning a vector of pointers, so the names have to outlive this function. String
+        // literals have static storage duration, which makes them safe to hand out here.
+        constexpr auto compatibilityExtensionName = "VK_KHR_portability_subset";
 
         auto result = std::vector< const char* >{
             VK_KHR_SWAPCHAIN_EXTENSION_NAME
         };
 
-        const auto it = std::find_if(
-            availableExtensions.begin(),
-            availableExtensions.end(),
-            []( const vk::ExtensionProperties& e )
-            {
-                return compatibilityExtensionName == e.extensionName;
-            }
-        );
-
-        if ( it != availableExtensions.end() )
-            result.push_back( compatibilityExtensionName.c_str() );
+        if ( isExtensionAvailable( availableExtensions, compatibilityExtensionName ) )
+            result.push_back( compatibilityExtensionName );
 
         return result;
     }
