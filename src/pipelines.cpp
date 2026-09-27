@@ -157,9 +157,24 @@ namespace vcpp
             .setColorAttachments( colorAttachmentRef )
             .setPDepthStencilAttachment( &depthAttachmentRef );
 
+        const auto subpassDependency = vk::SubpassDependency{}
+            .setSrcSubpass( VK_SUBPASS_EXTERNAL )
+            .setSrcStageMask(
+                vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                vk::PipelineStageFlagBits::eEarlyFragmentTests )
+            .setSrcAccessMask( vk::AccessFlagBits::eNone )
+            .setDstSubpass( 0 )
+            .setDstStageMask(
+                vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                vk::PipelineStageFlagBits::eEarlyFragmentTests )
+            .setDstAccessMask(
+                vk::AccessFlagBits::eColorAttachmentWrite |
+                vk::AccessFlagBits::eDepthStencilAttachmentWrite );
+
         const auto renderPassCreateInfo = vk::RenderPassCreateInfo{}
             .setAttachments( attachments )
-            .setSubpasses( subpass );
+            .setSubpasses( subpass )
+            .setDependencies( subpassDependency );
 
         return logicalDevice.createRenderPassUnique( renderPassCreateInfo );
     }

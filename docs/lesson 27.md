@@ -185,6 +185,96 @@ auto Swapchain::getNextFrame() -> FrameData
 
 If you run this version, you should no longer get the semaphore-related validation errors.
 
+## Subpass Dependencies
+Now to the second problem. This one is unrelated to the issue we just fixed, it was actually there from the beginning (it would obviously have been a good idea to enable this validation much earlier). To understand it, let's look a bit more closely at how a render pass is structured:
+
+A render pass is a combination of one or more subpasses. For example, you could have one subpass take care of all the geometry calculations and a second one for the lighting. Execution order and dependencies between subpasses are defined with the help of `SubpassDependency` objects. You can think of them as the description of the edges in a dependency graph.
+
+We only defined one subpass so far, so we didn't care about dependencies. But actually there is another 'virtual' subpass, which is 'all the work that happens before or after the render pass'. And even though we didn't define them explicitly, there are dependencies between our subpass and this virtual (a.k.a. _external_) one.
+
+A `SubpassDependency` is defined like this:
+```cpp
+struct SubpassDependency
+{
+    ...
+    SubpassDependency& setSrcSubpass( uint32_t srcSubpass_ );
+    SubpassDependency& setDstSubpass( uint32_t dstSubpass_ );
+    SubpassDependency& setSrcStageMask( vk::PipelineStageFlags srcStageMask_ );
+    SubpassDependency& setDstStageMask( vk::PipelineStageFlags dstStageMask_ );
+    SubpassDependency& setSrcAccessMask( vk::AccessFlags srcAccessMask_ );
+    SubpassDependency& setDstAccessMask( vk::AccessFlags dstAccessMask_ );
+    SubpassDependency& setDependencyFlags( vk::DependencyFlags dependencyFlags_ );
+    ...
+};
+```
+
+- `setSrcSubpass` specifies the source subpass of the dependency.
+- `setDstSubpass` specifies the destination subpass of the dependency.
+- `setSrcStageMask` and `setDstStageMask` narrow the dependency down to specific pipeline stages: srcSubpass's stages in srcStageMask must complete before dstSubpass's stages in dstStageMask execute, and any implicit layout transition happens in between.
+- `setSrcAccessMask` and `setDstAccessMask` describe the memory accesses that need to be made available and visible across the dependency, so that writes on the source side are actually observable on the destination side.
+- `setDependencyFlags` allows some finer control in some cases.
+
+Since we didn't define an explicit dependency for the external subpass, Vulkan implicitly defines it for each attachment. It looks like this:
+```c
+VkSubpassDependency implicitDependency = {
+    .srcSubpass      = VK_SUBPASS_EXTERNAL,
+    .srcStageMask    = VK_PIPELINE_STAGE_NONE,  // used to be TOP_OF_PIPE in earlier versions of Vulkan
+    .srcAccessMask   = 0,
+    .dstSubpass      = < the first subpass that uses this attachment >,
+    .dstStageMask    = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+    .dstAccessMask   = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT |
+                       VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                       VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+    .dependencyFlags = 0,
+};
+```
+
+What that essentially tells the GPU is that our subpass isn't dependent on anything that happens in the external subpass ( `VK_PIPELINE_STAGE_NONE` and `srcAccessMask=0`). This seems reasonable at first sight, but it's actually problematic in our case.
+
+Look at how we use the `readyForRenderingSemaphore`s when creating the `SubmitInfo` in `main`: we set the `waitDstStageMask` to `eColorAttachmentOutput`, which means that the semaphore blocks pipeline operations that access the color attachment until it becomes signalled. However, at the beginning the render pass has to transition the color attachment out of `eUndefined`, and that transition is a memory write.
+
+Per the Vulkan spec, the transition of an attachment's initial layout to the subpass-layout is performed as part of the subpass dependency itself: after the source scope's availability operations and before the destination scope's visibility operations. That means with the dependency defined as above, the transition is required to happen before any command in our subpass, but it doesn't have to wait for our semaphores to be signalled. So it might actually happen while the attachment is still being read from by the presentation engine. In addition, we set the `loadOp` for the color attachment to `eClear` in `createRenderPass`, and that is another memory write that may happen before.
+
+So, this implicit subpass dependency is clearly not what we need and the cause of the validation errors we're seeing. We can fix this by explicitly adding one ourselves. So let's do that:
+```cpp
+// pipelines.cpp
+auto createRenderPass(
+    const vk::Device& logicalDevice,
+    vk::Format colorFormat
+) -> vk::UniqueRenderPass
+{
+    ...
+    const auto subpassDependency = vk::SubpassDependency{}
+        .setSrcSubpass( VK_SUBPASS_EXTERNAL )
+        .setSrcStageMask(
+            vk::PipelineStageFlagBits::eColorAttachmentOutput |
+            vk::PipelineStageFlagBits::eEarlyFragmentTests )
+        .setSrcAccessMask( vk::AccessFlagBits::eNone )
+        .setDstSubpass( 0 )
+        .setDstStageMask(
+            vk::PipelineStageFlagBits::eColorAttachmentOutput |
+            vk::PipelineStageFlagBits::eEarlyFragmentTests )
+        .setDstAccessMask(
+            vk::AccessFlagBits::eColorAttachmentWrite |
+            vk::AccessFlagBits::eDepthStencilAttachmentWrite );
+
+    const auto renderPassCreateInfo = vk::RenderPassCreateInfo{}
+        .setAttachments( attachments )
+        .setSubpasses( subpass )
+        .setDependencies( subpassDependency );
+    ...
+}
+```
+We define our source subpass as `VK_SUBPASS_EXTERNAL`, which refers to that 'virtual' subpass I mentioned above (in this case everything that happens before the render pass, because we define it as a src). We then say that we need all operations on `eColorAttachmentOutput` and `eEarlyFragmentTests` stages to complete before the stages in the destination subpass can be executed.
+
+And this is what fixes our issue: since `eColorAttachmentOutput` is also the stage that our semaphore waits on, the transition from external to our subpass will now only happen when the semaphore is signalled. So the layout transition will also only happen then.
+
+The destination subpass is the only one we defined (the one at index 0), and the stages in it that need to wait are again `eColorAttachmentOutput` and `eEarlyFragmentTests`.
+
+With that in place the hazard is eliminated and you should no longer see any validation errors.
+
 
 ---
 
