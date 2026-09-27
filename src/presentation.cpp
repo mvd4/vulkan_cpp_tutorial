@@ -226,7 +226,7 @@ namespace vcpp
             ) );
         }
 
-        for ( const auto& v : m_imageViews )
+        for ( std::size_t i = 0; i < m_imageViews.size(); ++i )
         {
             m_readyForPresentingSemaphores.push_back( logicalDevice.createSemaphoreUnique(
                 vk::SemaphoreCreateInfo{}

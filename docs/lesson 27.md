@@ -1,7 +1,7 @@
-# Lesson 27: Improving the Render Loop I - Synchronization
+# Lesson 27: Improving the Render Loop - Part 1: Synchronization
 
 ## Enabling synchronization validation
-In the last lesson, I actually introduced a subtle bug: I created `maxFramesInFlight` semaphores in `readyForPresentingSemaphores` and indexed the one to use by the current frame index. That's not correct: we do not control the actual number of swapchain images and so it is not necessarily identical to the number of frames in flight. So we need one semaphore per swapchain image. The version from last time will likely work in practice, but technically speaking it's a synchronization bug.
+Back in lesson 21, when we introduced frames in flight, I actually introduced a subtle bug: I created `maxFramesInFlight` semaphores in `readyForPresentingSemaphores` and indexed the one to use by the current frame index. That's not correct: we do not control the actual number of swapchain images and so it is not necessarily identical to the number of frames in flight. So we need one semaphore per swapchain image. Our code as it is will likely work in practice, but technically speaking it's a synchronization bug.
 
 Before we set about fixing this, let's take a step back though: bugs like this are exactly the kind of thing that "works on my machine" right up until it doesn't. Who knows what other issues we have lurking in our code? Isn't there a way that we can get a bit more certainty?
 
@@ -56,7 +56,7 @@ if constexpr ( isDebugBuild() )
     if ( enableValidation )
     {
         layersToEnable.push_back( validationLayerName );
-        std::cout << "Validation layer enabled\n";
+        std::cout << "Validation layer enabled\n\n";
     }
 
     const auto validationLayerExtensions = enableValidation
@@ -78,7 +78,7 @@ if constexpr ( isDebugBuild() )
     if ( enableSynchronizationValidation )
     {
         extensionsToEnable.push_back( VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME );
-        std::cout << "Synchronization validation enabled\n";
+        std::cout << "Synchronization validation enabled\n\n";
     }
 }
 ```
@@ -121,7 +121,7 @@ You'll notice one more change in that snippet: the macOS portability flag now go
 
 Building and running this does yield errors, but - at least on my machine - they're actually not our semaphore mix-up: all I get is a `WRITE_AFTER_READ` hazard that mentions `vkQueueSubmit`, `vkCmdBeginRenderPass` and `vkAcquireNextImageKHR`.
 
-So apparently we _do_ have a few synchronization bugs in the codebase. That's great, the validation already paid off. But those are not the error I talked about in the beginning. Why aren't we seeing that issue?
+So apparently we _do_ have another synchronization bug in the codebase. That's great, the validation already paid off. But this is not the error I talked about in the beginning. Why aren't we seeing that issue?
 
 The reason is that I incidentally have the same number of swapchain images and frames in flight. Apparently, the driver returned exactly the minimum number of images that the program requested, which happens to be the same as the frames in flight. In this case there's no problem because we have the right number of semaphores and the indices also match. However, if you change `requestedSwapchainImageCount` to something greater than 2, you should see this validation error among the other ones:
 
@@ -154,7 +154,7 @@ Swapchain::Swapchain(
         ) );
     }
 
-    for ( const auto& v : m_imageViews )
+    for ( std::size_t i = 0; i < m_imageViews.size(); ++i )
     {
         m_readyForPresentingSemaphores.push_back( logicalDevice.createSemaphoreUnique(
             vk::SemaphoreCreateInfo{}
@@ -185,7 +185,7 @@ auto Swapchain::getNextFrame() -> FrameData
 
 If you run this version, you should no longer get the semaphore-related validation errors.
 
-## Subpass Dependencies
+## Subpass dependencies
 Now to the second problem. This one is unrelated to the issue we just fixed, it was actually there from the beginning (it would obviously have been a good idea to enable this validation much earlier). To understand it, let's look a bit more closely at how a render pass is structured:
 
 A render pass is a combination of one or more subpasses. For example, you could have one subpass take care of all the geometry calculations and a second one for the lighting. Execution order and dependencies between subpasses are defined with the help of `SubpassDependency` objects. You can think of them as the description of the edges in a dependency graph.
@@ -235,7 +235,9 @@ What that essentially tells the GPU is that our subpass isn't dependent on anyth
 
 Look at how we use the `readyForRenderingSemaphore`s when creating the `SubmitInfo` in `main`: we set the `waitDstStageMask` to `eColorAttachmentOutput`, which means that the semaphore blocks pipeline operations that access the color attachment until it becomes signalled. However, at the beginning the render pass has to transition the color attachment out of `eUndefined`, and that transition is a memory write.
 
-Per the Vulkan spec, the transition of an attachment's initial layout to the subpass-layout is performed as part of the subpass dependency itself: after the source scope's availability operations and before the destination scope's visibility operations. That means with the dependency defined as above, the transition is required to happen before any command in our subpass, but it doesn't have to wait for our semaphores to be signalled. So it might actually happen while the attachment is still being read from by the presentation engine. In addition, we set the `loadOp` for the color attachment to `eClear` in `createRenderPass`, and that is another memory write that may happen before.
+Per the Vulkan spec, the transition of an attachment's initial layout to the subpass-layout is performed as part of the subpass dependency itself: after the source scope's availability operations and before the destination scope's visibility operations. That means with the dependency defined as above, the transition is required to happen before any command in our subpass, but it doesn't have to wait for our semaphores to be signalled. So it might actually happen while the attachment is still being read from by the presentation engine.
+
+Interestingly, the `eClear` we set as the color attachment's `loadOp` in `createRenderPass` is _not_ affected by this. Load operations on color attachments are executed in the `eColorAttachmentOutput` stage, so the clear already waits for our semaphore. The layout transition is the only write that slips through.
 
 So, this implicit subpass dependency is clearly not what we need and the cause of the validation errors we're seeing. We can fix this by explicitly adding one ourselves. So let's do that:
 ```cpp
@@ -267,13 +269,25 @@ auto createRenderPass(
     ...
 }
 ```
-We define our source subpass as `VK_SUBPASS_EXTERNAL`, which refers to that 'virtual' subpass I mentioned above (in this case everything that happens before the render pass, because we define it as a src). We then say that we need all operations on `eColorAttachmentOutput` and `eEarlyFragmentTests` stages to complete before the stages in the destination subpass can be executed.
+We define our source subpass as `VK_SUBPASS_EXTERNAL`, which refers to that 'virtual' subpass I mentioned above (in this case everything that happens before the render pass, because we define it as a src). We then say that we need all operations on `eColorAttachmentOutput` and `eEarlyFragmentTests` stages to complete before the stages in the destination subpass can be executed. The destination subpass is the only one we defined (the one at index 0).
 
 And this is what fixes our issue: since `eColorAttachmentOutput` is also the stage that our semaphore waits on, the transition from external to our subpass will now only happen when the semaphore is signalled. So the layout transition will also only happen then.
 
-The destination subpass is the only one we defined (the one at index 0), and the stages in it that need to wait are again `eColorAttachmentOutput` and `eEarlyFragmentTests`.
+So far I've only talked about the color attachment, but our dependency also mentions `eEarlyFragmentTests` and `eDepthStencilAttachmentWrite`. That's for the depth attachment, which has exactly the same problem, just a bit better hidden.
+
+At the start of the render pass, the depth image is transitioned out of `eUndefined` and then cleared, because we set its `loadOp` to `eClear`. Both are writes. Unlike the color clear, the depth clear does not happen in `eColorAttachmentOutput`: depth load operations execute in the `eEarlyFragmentTests` stage. Our semaphore only blocks `eColorAttachmentOutput`, so nothing prevents this stage from starting early. Remember that we have one depth image per swapchain image. So the previous frame that rendered into this swapchain image, and with it into this depth image, may still be running its depth tests while we already clear the image for the next frame. That's a write-after-write hazard.
+
+The explicit dependency fixes this through a so-called *dependency chain*[^2]:
+1. the semaphore wait blocks `eColorAttachmentOutput` until the swapchain image has been presented, which in turn can only happen after the previous frame's rendering has completed
+2. our dependency's source scope includes `eColorAttachmentOutput`, so it picks up where the semaphore wait left off
+3. its destination scope includes `eEarlyFragmentTests`, so the depth layout transition and clear now wait for the semaphore as well
+
+`eDepthStencilAttachmentWrite` in the destination access mask makes sure the previous frame's depth writes are visible to the clear and the layout transition. We don't need a source access mask: signalling a semaphore already makes all writes of the submission available.
+
+Strictly speaking, we would not even need `eEarlyFragmentTests` in the *source* stage mask, because the chain through `eColorAttachmentOutput` already does all the work. It does no harm though, and it's what you'd need if you ever share a single depth image between frames. In that case you would also have to add `eLateFragmentTests` to the source stages and `eDepthStencilAttachmentWrite` to the source access mask, because depth writes can also happen after the fragment shader.
 
 With that in place the hazard is eliminated and you should no longer see any validation errors.
+
 
 ## Resetting the fence at the right time
 There's one small improvement I want to make to our fence handling before we move on: we currently reset our fences directly after they were signaled and before the call to `acquireNextImageKHR`. If that throws an `OutOfDateKHRError`, the fence is left unsignaled with nothing to signal it. It's currently only working because `main` catches that exception and sets `framebufferSizeChanged`, which makes the next iteration of the render loop destroy and recreate the whole `Swapchain` - and with it the fence in question. That implicit coupling is fragile though, so let's move the reset to after the acquire call:
@@ -314,7 +328,7 @@ vcpp::copyDataToBuffer( logicalDevice, verticesTemp, gpuVertexBuffer );
 ```
 We transform all our vertices on the CPU and then copy the result into the one single vertex buffer that we created before the loop. But that is obviously the same buffer that the command buffer we submitted in the _previous_ iteration binds and reads from.
 
-Remember that `queue.submit` doesn't wait for anything: it hands the command buffer over to the GPU and returns immediately. So by the time we're back at the top of the loop, the GPU may very well still be busy drawing the previous frame - which means it may still be reading from that buffer. And there we are, overwriting it. That's another write-after-read hazard, the very same class of bug as the two we just fixed. The synchronization validation cannot warn us about it because it doesn't see our write.
+Remember that `queue.submit` doesn't wait for anything: it hands the command buffer over to the GPU and returns immediately. So by the time we're back at the top of the loop, the GPU may very well still be busy drawing the previous frame - which means it may still be reading from that buffer. And there we are, overwriting it. That's another write-after-read hazard, the very same class of bug as the render pass issue we just fixed. The synchronization validation cannot warn us about it because it doesn't see our write.
 
 So how do we fix it? The standard answer is to give each frame in flight its own buffer, in the same way we already do for the command buffers, the fences and the `readyForRendering` semaphores. So let's create one buffer per frame in flight instead of a single one:
 ```cpp
@@ -359,11 +373,12 @@ try
 ```
 Note that we bind the frame's buffer to a local reference called `gpuVertexBuffer`, so neither the `copyDataToBuffer` nor the `recordCommandBuffer` call below it has to change at all.
 
-There's a pattern here that's worth taking away from this lesson, because it will come up again and again: every resource that the CPU writes to while the GPU may still be using it needs to exist once per frame in flight. Resources that are only ever read by the GPU - our shader modules, the pipeline, the render pass - can happily be shared.[^2]
+There's a pattern here that's worth taking away from this lesson, because it will come up again and again: every resource that the CPU writes to while the GPU may still be using it needs to exist once per frame in flight. Resources that are only ever read by the GPU - our shader modules, the pipeline, the render pass - can happily be shared.[^3]
 
 Build and run this version and you should see the same rotating cube as before, without any validation errors. Our synchronization is now sound, and with that out of the way we can finally get to improving the render loop itself - which is what the next lesson will be about.
 
 ---
 
 [^1]: `VK_EXT_validation_features` - and with it `vk::ValidationFeaturesEXT` - has been deprecated in favour of `VK_EXT_layer_settings`, which provides a more general mechanism for configuring the behaviour of any layer, not just the validation layer. The older extension is still widely supported and keeps us consistent with what we've been requesting since lesson 13, so we'll stick with it here. Just be aware of its successor if you're working against a recent SDK.
-[^2]: The alternative to duplicating the buffer is to keep one device-local vertex buffer and upload into it from a per-frame staging buffer with `vkCmdCopyBuffer`. That has the advantage of making the transfer a real command - so synchronization validation can see it - and device-local memory is faster for the GPU to read. But it also needs a per-frame staging buffer plus explicit barriers between transfer and vertex input, so it's more work. We'll get to staging buffers later in the tutorial.
+[^2]: See the Vulkan specification, chapter "Synchronization and Cache Control", section "Execution and Memory Dependencies": https://docs.vulkan.org/spec/latest/chapters/synchronization.html#synchronization-dependencies
+[^3]: The alternative to duplicating the buffer is to keep one device-local vertex buffer and upload into it from a per-frame staging buffer with `vkCmdCopyBuffer`. That has the advantage of making the transfer a real command - so synchronization validation can see it - and device-local memory is faster for the GPU to read. But it also needs a per-frame staging buffer plus explicit barriers between transfer and vertex input, so it's more work. We'll get to staging buffers later in the tutorial.
