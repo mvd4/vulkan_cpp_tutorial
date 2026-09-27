@@ -275,6 +275,30 @@ The destination subpass is the only one we defined (the one at index 0), and the
 
 With that in place the hazard is eliminated and you should no longer see any validation errors.
 
+## Resetting the fence at the right time
+There's one small improvement I want to make to our fence handling before we move on: we currently reset our fences directly after they were signaled and before the call to `acquireNextImageKHR`. If that throws an `OutOfDateKHRError`, the fence is left unsignaled with nothing to signal it. It's currently only working because `main` catches that exception and sets `framebufferSizeChanged`, which makes the next iteration of the render loop destroy and recreate the whole `Swapchain` - and with it the fence in question. That implicit coupling is fragile though, so let's move the reset to after the acquire call:
+```cpp
+// presentation.cpp
+auto Swapchain::getNextFrame() -> FrameData
+{
+    [[maybe_unused]] const auto result = m_logicalDevice.waitForFences(
+        *m_inFlightFences[ m_currentFrameIndex ],
+        true,
+        std::numeric_limits< std::uint64_t >::max()
+    );
+
+    const auto swapchainImageIndex = m_logicalDevice.acquireNextImageKHR(
+        *m_swapchain,
+        std::numeric_limits< std::uint64_t >::max(),
+        *m_readyForRenderingSemaphores[ m_currentFrameIndex ]
+    ).value;
+
+    m_logicalDevice.resetFences( *m_inFlightFences[ m_currentFrameIndex ] );
+
+    ...
+}
+```
+This doesn't change the observable behaviour of our program, but it makes `getNextFrame` correct on its own terms instead of relying on a caller that happens to throw the whole `Swapchain` away.
 
 ---
 

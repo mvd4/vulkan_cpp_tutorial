@@ -239,13 +239,16 @@ namespace vcpp
         [[maybe_unused]] const auto result = m_logicalDevice.waitForFences(
             *m_inFlightFences[ m_currentFrameIndex ],
             true,
-            std::numeric_limits< std::uint64_t >::max() );
-        m_logicalDevice.resetFences( *m_inFlightFences[ m_currentFrameIndex ] );
+            std::numeric_limits< std::uint64_t >::max()
+        );
 
         const auto swapchainImageIndex = m_logicalDevice.acquireNextImageKHR(
             *m_swapchain,
             std::numeric_limits< std::uint64_t >::max(),
-            *m_readyForRenderingSemaphores[ m_currentFrameIndex ] ).value;
+            *m_readyForRenderingSemaphores[ m_currentFrameIndex ]
+        ).value;
+
+        m_logicalDevice.resetFences( *m_inFlightFences[ m_currentFrameIndex ] );
 
         const auto frame = FrameData{
             m_currentFrameIndex,
