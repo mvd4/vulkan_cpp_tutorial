@@ -59,7 +59,7 @@ namespace {
         const auto swapchainImages = logicalDevice.getSwapchainImagesKHR( swapchain );
 
         std::vector< vk::UniqueImageView > swapchainImageViews;
-        for( const auto& img : swapchainImages )
+        for ( const auto& img : swapchainImages )
         {
             swapchainImageViews.push_back(
                 createImageView( logicalDevice, img, imageFormat )
@@ -78,7 +78,7 @@ namespace {
     ) -> std::vector< vk::UniqueFramebuffer >
     {
         std::vector< vk::UniqueFramebuffer > result;
-        for( std::size_t i = 0; i < imageViews.size(); ++i )
+        for ( std::size_t i = 0; i < imageViews.size(); ++i )
         {
             const std::array< vk::ImageView, 2 > attachments = { *imageViews[ i ], *depthImageViews[ i ] };
             const auto frameBufferCreateInfo = vk::FramebufferCreateInfo{}
@@ -165,7 +165,7 @@ namespace {
     {
         std::vector< vcpp::GPUImage > result;
         result.reserve( count );
-        for( std::size_t i = 0; i < count; ++i )
+        for ( std::size_t i = 0; i < count; ++i )
             result.push_back( createDepthImage( physicalDevice, logicalDevice, imageExtent ) );
 
         return result;
@@ -178,7 +178,7 @@ namespace {
     {
         std::vector< vk::UniqueImageView > result;
         result.reserve( depthImages.size() );
-        for( const auto& depthImage : depthImages )
+        for ( const auto& depthImage : depthImages )
         {
             result.push_back( createImageView(
                 logicalDevice,
@@ -216,7 +216,7 @@ namespace vcpp
         assert( maxFramesInFlight > 0 );
         assert( requestedSwapchainImageCount > 0 );
 
-        for( std::uint32_t f = 0; f < maxFramesInFlight; ++f )
+        for ( std::uint32_t f = 0; f < maxFramesInFlight; ++f )
         {
             m_inFlightFences.push_back( logicalDevice.createFenceUnique(
                 vk::FenceCreateInfo{}.setFlags( vk::FenceCreateFlagBits::eSignaled )
@@ -306,6 +306,6 @@ namespace vcpp
             imageExtent,
             maxFramesInFlight,
             requestedSwapchainImageCount
-         );
+        );
     }
 } // namespace vcpp

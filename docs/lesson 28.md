@@ -683,7 +683,7 @@ auto Renderer::drawFrame(
 }
 ```
 
-Once you've adjusted the calls in `main()` to the changed function signatures, everything should compile and run as before. The difference is that now we could change the geometry whenever we want, simply by modifiying the vertex buffer.
+Once you've adjusted the calls in `main()` to the changed function signatures, everything should compile and run as before. The difference is that now we could change the geometry whenever we want, simply by passing different vertex data to `drawFrame`. The renderer takes care of providing a large enough GPU buffer on its own.
 
 And with that, I think we're well prepared to dive into the more interesting aspects of 3D rendering: lighting, texturing, and the like. But that's for the upcoming lessons, for today we've done enough. Thanks for seeing this through with me and see you next time.
 

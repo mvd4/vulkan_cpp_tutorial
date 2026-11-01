@@ -281,8 +281,8 @@ namespace vcpp
         const vk::PhysicalDevice& physicalDevice,
         vk::QueueFlags requiredFlags,
         std::optional< vk::SurfaceKHR > surface
-     ) -> std::uint32_t
-     {
+    ) -> std::uint32_t
+    {
         const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
 
         std::uint32_t index = 0;

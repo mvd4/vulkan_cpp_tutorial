@@ -32,7 +32,7 @@ namespace vcpp
         vk::MemoryPropertyFlags requiredMemoryFlags
     ) -> std::uint32_t
     {
-        for(
+        for (
             std::uint32_t memoryType = 1, i = 0;
             i < memoryProperties.memoryTypeCount;
             ++i, memoryType <<= 1
