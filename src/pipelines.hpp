@@ -59,7 +59,6 @@ namespace vcpp
         const vk::ShaderModule& vertexShader,
         const vk::ShaderModule& fragmentShader,
         const vk::RenderPass& renderPass,
-        const vk::Extent2D& viewportExtent,
         std::span< const vk::Format > vertexFormats
     ) -> vk::UniquePipeline;
 }

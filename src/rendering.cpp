@@ -50,6 +50,19 @@ namespace vcpp
         commandBuffer.beginRenderPass( renderPassBeginInfo, vk::SubpassContents::eInline );
 
         commandBuffer.bindPipeline( vk::PipelineBindPoint::eGraphics, pipeline );
+
+        const auto viewport = vk::Viewport{}
+            .setX( 0.f )
+            .setY( 0.f )
+            .setWidth( static_cast< float >( renderExtent.width ) )
+            .setHeight( static_cast< float >( renderExtent.height ) )
+            .setMinDepth( 0.f )
+            .setMaxDepth( 1.f );
+        commandBuffer.setViewport( 0, viewport );
+
+        const auto scissor = vk::Rect2D{ { 0, 0 }, renderExtent };
+        commandBuffer.setScissor( 0, scissor );
+
         commandBuffer.bindVertexBuffers( 0, vertexBuffer, vk::DeviceSize{ 0 } );
 
         commandBuffer.draw( vertexCount, 1, 0, 0 );

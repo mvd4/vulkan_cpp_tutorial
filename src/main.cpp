@@ -105,14 +105,22 @@ auto main() -> int
 
         const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
-        vk::UniquePipeline pipeline;
-        std::unique_ptr< vcpp::Swapchain > swapchain;
-        vk::Extent2D swapchainExtent;
-
         constexpr auto vertexFormats = std::array< vk::Format, 2 >{
             vk::Format::eR32G32B32A32Sfloat,
             vk::Format::eR32G32B32A32Sfloat,
         };
+
+        const auto pipeline = vcpp::createGraphicsPipeline(
+            logicalDevice,
+            *pipelineLayout,
+            *vertexShader,
+            *fragmentShader,
+            *renderPass,
+            vertexFormats
+        );
+
+        std::unique_ptr< vcpp::Swapchain > swapchain;
+        vk::Extent2D swapchainExtent;
 
         constexpr size_t vertexCount = 36;
         const std::array< Vertex, vertexCount > vertices = {
@@ -196,30 +204,14 @@ auto main() -> int
                 continue;
             }
 
-            const auto now = std::chrono::steady_clock::now();
-            const float deltaTime = std::min( std::chrono::duration< float >( now - lastFrameTime ).count(), 0.1f );
-            lastFrameTime = now;
-            rotationAngle = std::fmod( rotationAngle + deltaTime * rotationSpeed, glm::two_pi< float >() );
-
             if ( framebufferSizeChanged )
             {
-                logicalDevice.device->waitIdle();
+                logicalDevice->waitIdle();
 
-                pipeline.reset();
                 swapchain.reset();
 
                 const auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR( *surface );
                 swapchainExtent = capabilities.currentExtent;
-
-                pipeline = vcpp::createGraphicsPipeline(
-                    logicalDevice,
-                    *pipelineLayout,
-                    *vertexShader,
-                    *fragmentShader,
-                    *renderPass,
-                    swapchainExtent,
-                    vertexFormats
-                );
 
                 swapchain = vcpp::createSwapchain(
                     physicalDevice,
@@ -243,6 +235,11 @@ auto main() -> int
 
                 framebufferSizeChanged = false;
             }
+
+            const auto now = std::chrono::steady_clock::now();
+            const float deltaTime = std::min( std::chrono::duration< float >( now - lastFrameTime ).count(), 0.1f );
+            lastFrameTime = now;
+            rotationAngle = std::fmod( rotationAngle + deltaTime * rotationSpeed, glm::two_pi< float >() );
 
             model = glm::rotate( glm::identity< glm::mat4 >(), rotationAngle, glm::vec3{ 0.f, 1.f, 0.f } );
 

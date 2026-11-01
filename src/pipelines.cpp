@@ -185,7 +185,6 @@ namespace vcpp
         const vk::ShaderModule& vertexShader,
         const vk::ShaderModule& fragmentShader,
         const vk::RenderPass& renderPass,
-        const vk::Extent2D& viewportExtent,
         std::span< const vk::Format > vertexFormats
     ) -> vk::UniquePipeline
     {
@@ -230,19 +229,9 @@ namespace vcpp
         const auto inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{}
             .setTopology( vk::PrimitiveTopology::eTriangleList );
 
-        const auto viewport = vk::Viewport{}
-            .setX( 0.f )
-            .setY( 0.f )
-            .setWidth( static_cast< float >( viewportExtent.width ) )
-            .setHeight( static_cast< float >( viewportExtent.height ) )
-            .setMinDepth( 0.f )
-            .setMaxDepth( 1.f );
-
-        const auto scissor = vk::Rect2D{ { 0, 0 }, viewportExtent };
-
         const auto viewportState = vk::PipelineViewportStateCreateInfo{}
-            .setViewports( viewport )
-            .setScissors( scissor );
+            .setViewportCount( 1 )
+            .setScissorCount( 1 );
 
         const auto rasterizationState = vk::PipelineRasterizationStateCreateInfo{}
             .setDepthClampEnable( false )
@@ -270,8 +259,16 @@ namespace vcpp
             .setDepthBoundsTestEnable( false )
             .setStencilTestEnable( false );
 
+        const auto dynamicStates = std::array< vk::DynamicState, 2 >{
+            vk::DynamicState::eViewport,
+            vk::DynamicState::eScissor
+        };
+        const auto dynamicState = vk::PipelineDynamicStateCreateInfo{}
+            .setDynamicStates( dynamicStates );
+
         const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
             .setStages( shaderStageInfos )
+            .setPDynamicState( &dynamicState )
             .setPVertexInputState( &vertexInputState )
             .setPInputAssemblyState( &inputAssemblyState )
             .setPViewportState( &viewportState )

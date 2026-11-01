@@ -66,7 +66,7 @@ This makes sure we're not wasting CPU time while minimized. Since `glfwWaitEvent
 ## Making the animation framerate-independent
 In our current implementation, we advance the rotation of the cube by a fixed amount for every frame. The problem is that this directly couples the rotation speed to the framerate, which is in turn synced to the display refresh rate (we're waiting for vsync to show the next frame). In other words: our cube will rotate more than twice as fast on a 144Hz display than it will on a 60Hz display. That's not ideal; we want our animation to be framerate-independent[^2].
 
-The solution is to not add a fixed increment to the rotation angle with each frame, but instead to define a rotation speed and calculate the increment by measuring the time elapsed since the last frame. We do that right at the start of each frame, directly after the minimize check:
+The solution is to not add a fixed increment to the rotation angle with each frame, but instead to define a rotation speed and calculate the increment by measuring the time elapsed since the last frame. We do that once per frame, directly after the swapchain recreation block and before we calculate the model matrix:
 ```cpp
 // main.cpp
 ...
@@ -83,16 +83,24 @@ while ( !glfwWindowShouldClose( window.get() ) )
         ...
     }
 
+    if ( framebufferSizeChanged )
+    {
+        ...
+    }
+
     const auto now = std::chrono::steady_clock::now();
     const float deltaTime = std::chrono::duration< float >( now - lastFrameTime ).count();
     lastFrameTime = now;
     rotationAngle += deltaTime * rotationSpeed;
+
+    model = glm::rotate( glm::identity< glm::mat4 >(), rotationAngle, glm::vec3{ 0.f, 1.f, 0.f } );
     ...
 }
 ```
 As you can see, we're using `std::chrono` for the time measurement. That's the modern C++ way to measure time, and `steady_clock` is guaranteed to be monotonic - it never jumps backwards, unlike `system_clock`, which can be adjusted while our program is running.
 
-This works, but there's two more issues we should consider: if the window is minimized or the render loop is blocked for another reason, our `deltaTime` can become pretty large, which would lead to jumps in the animation. A common way to handle this is to clamp the delta to a maximum.
+This works, but there are two more issues we should consider. First, if the window is minimized or the render loop is blocked for another reason, our `deltaTime` can become pretty large, which would lead to jumps in the animation. A common way to handle this is to clamp the delta to a maximum.
+
 The second issue is that `rotationAngle` currently grows without bound. Because a `float` only has about seven significant decimal digits, the larger the angle gets, the coarser the steps between representable values become. If the program runs long enough, our small per-frame increments will start to get rounded away, and the animation will begin to stutter. Since a rotation by 2π is the same as no rotation at all, we can simply address this by wrapping the angle back into the range [0, 2π). So let's apply both fixes:
 ```cpp
 // main.cpp
@@ -103,9 +111,171 @@ rotationAngle = std::fmod( rotationAngle + deltaTime * rotationSpeed, glm::two_p
 ...
 ```
 
-And with this, we have addressed another issue with our render loop.
+And with this, our animation is framerate-independent and robust against stalls.
+
+## Avoiding pipeline recreation on resize
+One more shortcoming of the current implementation is that we need to drop and recreate the whole pipeline whenever the window size (or, to be more exact, the framebuffer/swapchain size) changes. Pipeline recreation can be expensive, and structurally nothing changes when the viewport is resized. The configuration of the pipeline's stages, the shaders, the vertex input layout - it all stays the same.
+
+It would therefore be much better if we could just communicate the new values of width and height to the existing pipeline instead of tearing it down entirely and rebuilding it. The way to do this in Vulkan is to turn the viewport and scissor into so-called *dynamic state*[^3]: the pipeline declares only that they exist, while the actual values are recorded into the command buffer each frame. Let's do that.
+
+The first step is to remove the viewport and scissor definition from our pipeline creation function. Instead of setting the viewport and scissor directly, we just set a count to let the pipeline know how many viewports and scissors to expect and declare them dynamic state. The setup code for viewport and scissor moves to `rendering.cpp`, because the pipeline now expects the dynamic state to be passed with every command buffer:
+```cpp
+// pipelines.cpp
+auto createGraphicsPipeline(
+    const vk::Device& logicalDevice,
+    const vk::PipelineLayout& pipelineLayout,
+    const vk::ShaderModule& vertexShader,
+    const vk::ShaderModule& fragmentShader,
+    const vk::RenderPass& renderPass,
+    std::span< const vk::Format > vertexFormats
+) -> vk::UniquePipeline
+{
+    ...
+    // move the existing viewport and scissor creation to recordCommandBuffer, see below
+    const auto viewportState = vk::PipelineViewportStateCreateInfo{}
+        .setViewportCount( 1 )
+        .setScissorCount( 1 );
+
+    ...
+    const auto dynamicStates = std::array< vk::DynamicState, 2 >{
+        vk::DynamicState::eViewport,
+        vk::DynamicState::eScissor
+    };
+    const auto dynamicState = vk::PipelineDynamicStateCreateInfo{}
+        .setDynamicStates( dynamicStates );
+
+    const auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
+        .setStages( shaderStageInfos )
+        .setPDynamicState( &dynamicState )
+    ...
+}
+```
+
+```cpp
+// rendering.cpp
+auto recordCommandBuffer(
+    const vk::CommandBuffer& commandBuffer,
+    const vk::Pipeline& pipeline,
+    const vk::RenderPass& renderPass,
+    const vk::Framebuffer& frameBuffer,
+    const vk::Extent2D& renderExtent,
+    const vk::Buffer& vertexBuffer,
+    std::uint32_t vertexCount
+) -> void
+{
+    ...
+
+    commandBuffer.bindPipeline( vk::PipelineBindPoint::eGraphics, pipeline );
+
+    const auto viewport = vk::Viewport{}
+        .setX( 0.f )
+        .setY( 0.f )
+        .setWidth( static_cast< float >( renderExtent.width ) )
+        .setHeight( static_cast< float >( renderExtent.height ) )
+        .setMinDepth( 0.f )
+        .setMaxDepth( 1.f );
+    commandBuffer.setViewport( 0, viewport );
+
+    const auto scissor = vk::Rect2D{ { 0, 0 }, renderExtent };
+    commandBuffer.setScissor( 0, scissor );
+
+    commandBuffer.bindVertexBuffers( 0, vertexBuffer, vk::DeviceSize{ 0 } );
+    ...
+}
+```
+
+`vk::PipelineDynamicStateCreateInfo` is simple enough that it doesn't need much explanation: it just holds the list of states we want to set dynamically, which we pass via `setDynamicStates`. Note that I also removed the `viewportExtent` parameter from `createGraphicsPipeline`, as we don't need it for pipeline creation anymore, so you'll have to adjust the declaration and the function call.
+
+If you compile and run this version now, everything should work as before. However, we're not reaping the benefits of our refactoring yet, as the pipeline is still destroyed and recreated whenever the window size changes. Fixing that is the last step.
+
+To do so, we move the pipeline creation in front of the render loop and remove all pipeline-related code from the `if ( framebufferSizeChanged )` block. Your `main` function should now look something like this:
+
+```cpp
+// main.cpp
+...
+auto main() -> int
+{
+    constexpr int windowWidth = 800;
+    constexpr int windowHeight = 600;
+    constexpr std::uint32_t requestedSwapchainImageCount = 2u;
+    constexpr std::uint32_t maxFramesInFlight = 2u;
+
+    try
+    {
+        ...
+        const auto pipeline = vcpp::createGraphicsPipeline(
+            logicalDevice,
+            *pipelineLayout,
+            *vertexShader,
+            *fragmentShader,
+            *renderPass,
+            vertexFormats
+        );
+
+        ...
+
+        while ( !glfwWindowShouldClose( window.get() ) )
+        {
+            glfwPollEvents();
+
+            if ( windowMinimized )
+            {
+                glfwWaitEvents();
+                continue;
+            }
+
+            if ( framebufferSizeChanged )
+            {
+                logicalDevice->waitIdle();
+
+                swapchain.reset();
+
+                const auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR( *surface );
+                swapchainExtent = capabilities.currentExtent;
+
+                swapchain = vcpp::createSwapchain(
+                    physicalDevice,
+                    logicalDevice,
+                    *renderPass,
+                    *surface,
+                    surfaceFormats[0],
+                    swapchainExtent,
+                    maxFramesInFlight,
+                    requestedSwapchainImageCount
+                );
+
+                view = glm::translate( glm::identity< glm::mat4 >(), glm::vec3{ 0.f, 0.f, -3.f } );
+
+                projection = glm::perspective(
+                    glm::radians( 30.0f ),
+                    swapchainExtent.width / static_cast< float >( swapchainExtent.height ),
+                    0.1f,
+                    10.0f
+                );
+
+                framebufferSizeChanged = false;
+            }
+
+            ...
+        }
+
+        logicalDevice->waitIdle();
+    }
+    catch( const std::exception& e )
+    {
+        std::cerr << "Exception thrown: " << e.what() << "\n";
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
+}
+```
+
+Compile and run this version, play around with resizing and minimizing the window. You shouldn't experience any errors or changes in behavior. Under the hood, however, resizing has become considerably cheaper: only the swapchain and its framebuffers are recreated now, while the pipeline lives for the entire lifetime of the program.
+
 
 ---
 
 [^1]: If your application still needs to do work while the window is minimized - background tasks, network I/O, animations that should keep running - you can use `glfwWaitEventsTimeout( double timeout )` instead. It behaves just like `glfwWaitEvents`, but returns after at most `timeout` seconds so you get a chance to do periodic work.
 [^2]: In fact, we'd ideally want to decouple the *simulation* entirely from the *rendering*, but that's out of scope for this lesson.
+[^3]: See the [Dynamic State](https://docs.vulkan.org/spec/latest/chapters/pipelines.html#pipelines-dynamic-state) section of the Vulkan specification for the full list of states that can be made dynamic.
