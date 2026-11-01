@@ -27,9 +27,13 @@ License.
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <algorithm>
 #include <array>
+#include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -175,7 +179,10 @@ auto main() -> int
         auto model = glm::identity< glm::mat4 >();
         auto view = glm::identity< glm::mat4 >();
         auto projection = glm::identity< glm::mat4 >();
+
         float rotationAngle = 0.f;
+        constexpr float rotationSpeed = glm::radians( 45.f );
+        auto lastFrameTime = std::chrono::steady_clock::now();
 
         auto verticesTemp = vertices;
 
@@ -188,6 +195,11 @@ auto main() -> int
                 glfwWaitEvents();
                 continue;
             }
+
+            const auto now = std::chrono::steady_clock::now();
+            const float deltaTime = std::min( std::chrono::duration< float >( now - lastFrameTime ).count(), 0.1f );
+            lastFrameTime = now;
+            rotationAngle = std::fmod( rotationAngle + deltaTime * rotationSpeed, glm::two_pi< float >() );
 
             if ( framebufferSizeChanged )
             {
@@ -238,8 +250,6 @@ auto main() -> int
             {
                 verticesTemp[ i ].position = projection * view * model * vertices[ i ].position;
             }
-
-            rotationAngle += 0.01f;
 
             try
             {
