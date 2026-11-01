@@ -49,7 +49,7 @@ namespace
 
     void onFramebufferSizeChanged( [[maybe_unused]] GLFWwindow* window, int width, int height )
     {
-        windowMinimized = width == 0 && height == 0;
+        windowMinimized = width == 0 || height == 0;
         framebufferSizeChanged = true;
     }
 }
@@ -184,7 +184,10 @@ auto main() -> int
             glfwPollEvents();
 
             if ( windowMinimized )
+            {
+                glfwWaitEvents();
                 continue;
+            }
 
             if ( framebufferSizeChanged )
             {
