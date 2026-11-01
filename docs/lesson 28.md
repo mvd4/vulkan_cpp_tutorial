@@ -273,6 +273,95 @@ auto main() -> int
 
 Compile and run this version, play around with resizing and minimizing the window. You shouldn't experience any errors or changes in behavior. Under the hood, however, resizing has become considerably cheaper: only the swapchain and its framebuffers are recreated now, while the pipeline lives for the entire lifetime of the program.
 
+## Pulling the drawing code out of `main()`
+Our `main()` function has become pretty long and somewhat cluttered again, so the last thing I want to do before calling it a day is to extract parts of the rendering code and put them into their own function. The inner try-catch block seems like a good candidate.
+
+Before we naively pull code out, though, let's take a step back and look at the data that is involved in rendering and presenting a scene on screen. We can group it into three categories:
+1. The scene data itself, i.e. everything that describes *what* we want to draw. At this point, this is pretty much our vertex data, but in the future it will encompass the transformations, the lighting data, etc. These are the things that potentially change frame by frame, and they are independent of how the pipeline actually processes them and whether and how they are finally presented to the user.
+2. The rendering pipeline. This includes everything that is needed to process the scene data and create a 2D image out of it. This normally doesn't change at all after it has been created, at least not in a simple tutorial like ours.
+3. The swapchain, which is responsible for presenting the rendered image on screen. As we've already established, this changes whenever the user resizes the window.
+
+We already have an abstraction for the third category: our `Swapchain` class. Let's look at the other two. As mentioned, in the first category we currently only have the vertex data. Let's nevertheless put that data into an explicit data structure:
+```cpp
+// rendering.hpp
+struct SceneData
+{
+    std::span< const std::byte > vertexData;
+    std::uint32_t vertexCount;
+};
+```
+As you can see, I took the opportunity to make the data structure independent of the concrete vertex format and the way we store it on the host. Thanks to the `span`, the data can live in a `std::array`, a `std::vector`, a plain C array or any other contiguous container. Getting a `span< const std::byte >` from typed data is a one-liner: `std::as_bytes( std::span{ vertices } )`. Keep in mind, though, that a `span` doesn't own the data it refers to, so the underlying storage has to outlive the `SceneData` that points to it. And since the pipeline needs to be informed about how to interpret the data anyway, we don't need to duplicate that information here. We could theoretically also derive the vertex count from the size of the buffer and the vertex formats, but I think it's better to keep track of it explicitly.
+
+Now let's look at the second category. Wrapping every resource related to the rendering pipeline into a struct might yield something like this:
+```cpp
+// rendering.hpp
+struct Renderer
+{
+    vk::UniqueRenderPass renderPass;
+    vk::UniquePipelineLayout pipelineLayout;
+    vk::UniquePipeline pipeline;
+    vk::UniqueCommandPool commandPool;
+
+    std::vector< GPUBuffer > vertexBuffers;
+    std::vector< vk::CommandBuffer > commandBuffers;
+};
+```
+
+However, since some of the members actually depend on other members for their initialization (e.g. `pipeline` depending on `pipelineLayout`), we can't initialize this struct in place. Creating the handles beforehand and moving them into the struct would also be tricky and error-prone. So let's give our `Renderer` a constructor:
+
+```cpp
+// rendering.cpp
+Renderer::Renderer(
+    const vk::PhysicalDevice& physicalDevice,
+    const LogicalDevice& logicalDevice,
+    const vk::ShaderModule& vertexShader,
+    const vk::ShaderModule& fragmentShader,
+    vk::Format colorFormat,
+    std::span< const vk::Format > vertexFormats,
+    std::uint64_t sizeVertexDataInBytes,
+    std::uint32_t maxFramesInFlight
+)
+    : renderPass{ createRenderPass( logicalDevice, colorFormat ) }
+    , pipelineLayout{ createGraphicsPipelineLayout( logicalDevice ) }
+    , pipeline{ createGraphicsPipeline(
+        logicalDevice,
+        *pipelineLayout,
+        vertexShader,
+        fragmentShader,
+        *renderPass,
+        vertexFormats
+    ) }
+    , commandPool{ logicalDevice->createCommandPoolUnique(
+        vk::CommandPoolCreateInfo{}
+            .setFlags( vk::CommandPoolCreateFlagBits::eResetCommandBuffer )
+            .setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
+    ) }
+{
+    for ( std::uint32_t f = 0; f < maxFramesInFlight; ++f )
+    {
+        vertexBuffers.push_back( createGPUBuffer(
+            physicalDevice,
+            logicalDevice,
+            sizeVertexDataInBytes,
+            vk::BufferUsageFlagBits::eVertexBuffer
+        ) );
+    }
+
+    const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
+        .setCommandPool( *commandPool )
+        .setLevel( vk::CommandBufferLevel::ePrimary )
+        .setCommandBufferCount( maxFramesInFlight );
+    commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
+}
+```
+
+I'll leave the necessary changes in `main.cpp` to make use of this struct as an exercise for you and not show them here. In short, you need to:
+- remove the creation of the render pass, the pipeline layout, the pipeline, the vertex buffers, the command pool and the command buffers from `main()`
+- create a `Renderer` instance instead, somewhere before the render loop
+- use the `renderer`'s members wherever the removed objects were used before
+
+If you compile and run this version, everything should work as before.
+
 
 ---
 

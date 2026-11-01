@@ -19,11 +19,56 @@ License.
 
 #include "rendering.hpp"
 
+#include "pipelines.hpp"
+
 #include <array>
 
 
 namespace vcpp
 {
+    Renderer::Renderer(
+        const vk::PhysicalDevice& physicalDevice,
+        const LogicalDevice& logicalDevice,
+        const vk::ShaderModule& vertexShader,
+        const vk::ShaderModule& fragmentShader,
+        vk::Format colorFormat,
+        std::span< const vk::Format > vertexFormats,
+        std::uint64_t sizeVertexDataInBytes,
+        std::uint32_t maxFramesInFlight
+    )
+        : renderPass{ createRenderPass( logicalDevice, colorFormat ) }
+        , pipelineLayout{ createGraphicsPipelineLayout( logicalDevice ) }
+        , pipeline{ createGraphicsPipeline(
+            logicalDevice,
+            *pipelineLayout,
+            vertexShader,
+            fragmentShader,
+            *renderPass,
+            vertexFormats
+        ) }
+        , commandPool{ logicalDevice->createCommandPoolUnique(
+            vk::CommandPoolCreateInfo{}
+                .setFlags( vk::CommandPoolCreateFlagBits::eResetCommandBuffer )
+                .setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
+        ) }
+    {
+        for ( std::uint32_t f = 0; f < maxFramesInFlight; ++f )
+        {
+            vertexBuffers.push_back( createGPUBuffer(
+                physicalDevice,
+                logicalDevice,
+                sizeVertexDataInBytes,
+                vk::BufferUsageFlagBits::eVertexBuffer
+            ) );
+        }
+
+        const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
+            .setCommandPool( *commandPool )
+            .setLevel( vk::CommandBufferLevel::ePrimary )
+            .setCommandBufferCount( maxFramesInFlight );
+        commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
+    }
+
     auto recordCommandBuffer(
         const vk::CommandBuffer& commandBuffer,
         const vk::Pipeline& pipeline,

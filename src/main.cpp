@@ -87,21 +87,6 @@ auto main() -> int
         const auto surfaceFormats = physicalDevice.getSurfaceFormatsKHR( *surface );
         if ( surfaceFormats.empty() )
             throw std::runtime_error( "Surface does not support any formats" );
-        const auto renderPass = vcpp::createRenderPass( logicalDevice, surfaceFormats[0].format );
-
-        const auto pipelineLayout = vcpp::createGraphicsPipelineLayout( logicalDevice );
-
-        const auto commandPool = logicalDevice->createCommandPoolUnique(
-            vk::CommandPoolCreateInfo{}
-                .setFlags( vk::CommandPoolCreateFlagBits::eResetCommandBuffer )
-                .setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
-        );
-
-        const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
-            .setCommandPool( *commandPool )
-            .setLevel( vk::CommandBufferLevel::ePrimary )
-            .setCommandBufferCount( maxFramesInFlight );
-        const auto commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
 
         const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
@@ -109,15 +94,6 @@ auto main() -> int
             vk::Format::eR32G32B32A32Sfloat,
             vk::Format::eR32G32B32A32Sfloat,
         };
-
-        const auto pipeline = vcpp::createGraphicsPipeline(
-            logicalDevice,
-            *pipelineLayout,
-            *vertexShader,
-            *fragmentShader,
-            *renderPass,
-            vertexFormats
-        );
 
         std::unique_ptr< vcpp::Swapchain > swapchain;
         vk::Extent2D swapchainExtent;
@@ -173,16 +149,17 @@ auto main() -> int
             Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
         };
 
-        auto gpuVertexBuffers = std::vector< vcpp::GPUBuffer >{};
-        for ( std::uint32_t f = 0; f < maxFramesInFlight; ++f )
-        {
-            gpuVertexBuffers.push_back( vcpp::createGPUBuffer(
-                physicalDevice,
-                logicalDevice,
-                sizeof( vertices ),
-                vk::BufferUsageFlagBits::eVertexBuffer
-            ) );
-        }
+        const auto renderer = vcpp::Renderer{
+            physicalDevice,
+            logicalDevice,
+            *vertexShader,
+            *fragmentShader,
+            surfaceFormats[0].format,
+            vertexFormats,
+            sizeof( vertices ),
+            maxFramesInFlight
+        };
+
 
         auto model = glm::identity< glm::mat4 >();
         auto view = glm::identity< glm::mat4 >();
@@ -216,7 +193,7 @@ auto main() -> int
                 swapchain = vcpp::createSwapchain(
                     physicalDevice,
                     logicalDevice,
-                    *renderPass,
+                    *renderer.renderPass,
                     *surface,
                     surfaceFormats[0],
                     swapchainExtent,
@@ -251,14 +228,14 @@ auto main() -> int
             try
             {
                 const auto frame = swapchain->getNextFrame();
-                const auto& gpuVertexBuffer = gpuVertexBuffers[ frame.frameInFlightIndex ];
+                const auto& gpuVertexBuffer = renderer.vertexBuffers[ frame.frameInFlightIndex ];
 
                 vcpp::copyDataToBuffer( logicalDevice, verticesTemp, gpuVertexBuffer );
 
                 vcpp::recordCommandBuffer(
-                    commandBuffers[ frame.frameInFlightIndex ],
-                    *pipeline,
-                    *renderPass,
+                    renderer.commandBuffers[ frame.frameInFlightIndex ],
+                    *renderer.pipeline,
+                    *renderer.renderPass,
                     frame.framebuffer,
                     swapchainExtent,
                     *gpuVertexBuffer.buffer,
@@ -268,7 +245,7 @@ auto main() -> int
                 const vk::PipelineStageFlags waitStages[] = {
                     vk::PipelineStageFlagBits::eColorAttachmentOutput };
                 const auto submitInfo = vk::SubmitInfo{}
-                    .setCommandBuffers( commandBuffers[ frame.frameInFlightIndex ] )
+                    .setCommandBuffers( renderer.commandBuffers[ frame.frameInFlightIndex ] )
                     .setWaitSemaphores( frame.readyForRenderingSemaphore )
                     .setSignalSemaphores( frame.readyForPresentingSemaphore )
                     .setWaitDstStageMask( waitStages );
