@@ -148,14 +148,13 @@ auto main() -> int
             Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
         };
 
-        const auto renderer = vcpp::Renderer{
+        auto renderer = vcpp::Renderer{
             physicalDevice,
             logicalDevice,
             *vertexShader,
             *fragmentShader,
             surfaceFormats[0].format,
             vertexFormats,
-            sizeof( vertices ),
             maxFramesInFlight
         };
 
@@ -192,7 +191,7 @@ auto main() -> int
                 swapchain = vcpp::createSwapchain(
                     physicalDevice,
                     logicalDevice,
-                    *renderer.renderPass,
+                    renderer.getRenderPass(),
                     *surface,
                     surfaceFormats[0],
                     swapchainExtent,
@@ -228,13 +227,11 @@ auto main() -> int
             {
                 const auto frame = swapchain->getNextFrame();
 
-                vcpp::drawFrame(
-                    logicalDevice,
+                renderer.drawFrame(
                     vcpp::SceneData{
                         std::as_bytes( std::span{ verticesTemp } ),
                         vertexCount
                     },
-                    renderer,
                     queue,
                     frame,
                     swapchain->getImageExtent()

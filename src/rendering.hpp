@@ -39,8 +39,10 @@ namespace vcpp
         std::uint32_t vertexCount;
     };
 
-    struct Renderer
+    class Renderer
     {
+    public:
+
         Renderer(
             const vk::PhysicalDevice& physicalDevice,
             const LogicalDevice& logicalDevice,
@@ -48,35 +50,34 @@ namespace vcpp
             const vk::ShaderModule& fragmentShader,
             vk::Format colorFormat,
             std::span< const vk::Format > vertexFormats,
-            std::uint64_t sizeVertexDataInBytes,
             std::uint32_t maxFramesInFlight
         );
 
-        vk::UniqueRenderPass renderPass;
-        vk::UniquePipelineLayout pipelineLayout;
-        vk::UniquePipeline pipeline;
-        vk::UniqueCommandPool commandPool;
+        Renderer( const Renderer& ) = delete;
+        Renderer( Renderer&& ) = delete;
+        auto operator=( const Renderer& ) -> Renderer& = delete;
+        auto operator=( Renderer&& ) -> Renderer& = delete;
 
-        std::vector< GPUBuffer > vertexBuffers;
-        std::vector< vk::CommandBuffer > commandBuffers;
+        auto drawFrame(
+            const SceneData& sceneData,
+            const vk::Queue& queue,
+            const Swapchain::FrameData& frame,
+            const vk::Extent2D& imageExtent
+        ) -> void;
+
+        auto getRenderPass() const -> vk::RenderPass { return *m_renderPass; }
+
+    private:
+
+        vk::PhysicalDevice m_physicalDevice;
+        vk::Device m_logicalDevice;
+
+        vk::UniqueRenderPass m_renderPass;
+        vk::UniquePipelineLayout m_pipelineLayout;
+        vk::UniquePipeline m_pipeline;
+        vk::UniqueCommandPool m_commandPool;
+
+        std::vector< GPUBuffer > m_vertexBuffers;
+        std::vector< vk::CommandBuffer > m_commandBuffers;
     };
-
-    auto recordCommandBuffer(
-        const vk::CommandBuffer& commandBuffer,
-        const vk::Pipeline& pipeline,
-        const vk::RenderPass& renderPass,
-        const vk::Framebuffer& frameBuffer,
-        const vk::Extent2D& renderExtent,
-        const vk::Buffer& vertexBuffer,
-        std::uint32_t vertexCount
-    ) -> void;
-
-    auto drawFrame(
-        const vk::Device& logicalDevice,
-        const SceneData& sceneData,
-        const Renderer& renderer,
-        const vk::Queue& queue,
-        const Swapchain::FrameData& frame,
-        const vk::Extent2D& imageExtent
-    ) -> void;
 }

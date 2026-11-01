@@ -22,53 +22,11 @@ License.
 #include "pipelines.hpp"
 
 #include <array>
+#include <cassert>
 
 
-namespace vcpp
+namespace
 {
-    Renderer::Renderer(
-        const vk::PhysicalDevice& physicalDevice,
-        const LogicalDevice& logicalDevice,
-        const vk::ShaderModule& vertexShader,
-        const vk::ShaderModule& fragmentShader,
-        vk::Format colorFormat,
-        std::span< const vk::Format > vertexFormats,
-        std::uint64_t sizeVertexDataInBytes,
-        std::uint32_t maxFramesInFlight
-    )
-        : renderPass{ createRenderPass( logicalDevice, colorFormat ) }
-        , pipelineLayout{ createGraphicsPipelineLayout( logicalDevice ) }
-        , pipeline{ createGraphicsPipeline(
-            logicalDevice,
-            *pipelineLayout,
-            vertexShader,
-            fragmentShader,
-            *renderPass,
-            vertexFormats
-        ) }
-        , commandPool{ logicalDevice->createCommandPoolUnique(
-            vk::CommandPoolCreateInfo{}
-                .setFlags( vk::CommandPoolCreateFlagBits::eResetCommandBuffer )
-                .setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
-        ) }
-    {
-        for ( std::uint32_t f = 0; f < maxFramesInFlight; ++f )
-        {
-            vertexBuffers.push_back( createGPUBuffer(
-                physicalDevice,
-                logicalDevice,
-                sizeVertexDataInBytes,
-                vk::BufferUsageFlagBits::eVertexBuffer
-            ) );
-        }
-
-        const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
-            .setCommandPool( *commandPool )
-            .setLevel( vk::CommandBufferLevel::ePrimary )
-            .setCommandBufferCount( maxFramesInFlight );
-        commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
-    }
-
     auto recordCommandBuffer(
         const vk::CommandBuffer& commandBuffer,
         const vk::Pipeline& pipeline,
@@ -116,24 +74,74 @@ namespace vcpp
 
         commandBuffer.end();
     }
+}
 
-    auto drawFrame(
-        const vk::Device& logicalDevice,
+
+namespace vcpp
+{
+    Renderer::Renderer(
+        const vk::PhysicalDevice& physicalDevice,
+        const LogicalDevice& logicalDevice,
+        const vk::ShaderModule& vertexShader,
+        const vk::ShaderModule& fragmentShader,
+        vk::Format colorFormat,
+        std::span< const vk::Format > vertexFormats,
+        std::uint32_t maxFramesInFlight
+    )
+        : m_physicalDevice{ physicalDevice }
+        , m_logicalDevice{ logicalDevice }
+        , m_renderPass{ createRenderPass( logicalDevice, colorFormat ) }
+        , m_pipelineLayout{ createGraphicsPipelineLayout( logicalDevice ) }
+        , m_pipeline{ createGraphicsPipeline(
+            logicalDevice,
+            *m_pipelineLayout,
+            vertexShader,
+            fragmentShader,
+            *m_renderPass,
+            vertexFormats
+        ) }
+        , m_commandPool{ logicalDevice->createCommandPoolUnique(
+            vk::CommandPoolCreateInfo{}
+                .setFlags( vk::CommandPoolCreateFlagBits::eResetCommandBuffer )
+                .setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
+        ) }
+        , m_vertexBuffers( maxFramesInFlight )
+    {
+        const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
+            .setCommandPool( *m_commandPool )
+            .setLevel( vk::CommandBufferLevel::ePrimary )
+            .setCommandBufferCount( maxFramesInFlight );
+        m_commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
+    }
+
+    auto Renderer::drawFrame(
         const SceneData& sceneData,
-        const Renderer& renderer,
         const vk::Queue& queue,
         const Swapchain::FrameData& frame,
         const vk::Extent2D& imageExtent
     ) -> void
     {
-        const auto& gpuVertexBuffer = renderer.vertexBuffers[ frame.frameInFlightIndex ];
+        assert( m_vertexBuffers.size() > frame.frameInFlightIndex );
+        assert( !sceneData.vertexData.empty() );
 
-        copyDataToBuffer( logicalDevice, sceneData.vertexData, gpuVertexBuffer );
+        auto& gpuVertexBuffer = m_vertexBuffers[ frame.frameInFlightIndex ];
+
+        if ( gpuVertexBuffer.size < sceneData.vertexData.size() )
+        {
+            gpuVertexBuffer = createGPUBuffer(
+                m_physicalDevice,
+                m_logicalDevice,
+                sceneData.vertexData.size(),
+                vk::BufferUsageFlagBits::eVertexBuffer
+            );
+        }
+
+        copyDataToBuffer( m_logicalDevice, sceneData.vertexData, gpuVertexBuffer );
 
         recordCommandBuffer(
-            renderer.commandBuffers[ frame.frameInFlightIndex ],
-            *renderer.pipeline,
-            *renderer.renderPass,
+            m_commandBuffers[ frame.frameInFlightIndex ],
+            *m_pipeline,
+            *m_renderPass,
             frame.framebuffer,
             imageExtent,
             *gpuVertexBuffer.buffer,
@@ -143,7 +151,7 @@ namespace vcpp
         const vk::PipelineStageFlags waitStages[] = {
             vk::PipelineStageFlagBits::eColorAttachmentOutput };
         const auto submitInfo = vk::SubmitInfo{}
-            .setCommandBuffers( renderer.commandBuffers[ frame.frameInFlightIndex ] )
+            .setCommandBuffers( m_commandBuffers[ frame.frameInFlightIndex ] )
             .setWaitSemaphores( frame.readyForRenderingSemaphore )
             .setSignalSemaphores( frame.readyForPresentingSemaphore )
             .setWaitDstStageMask( waitStages );

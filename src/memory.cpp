@@ -19,6 +19,7 @@ License.
 
 #include "memory.hpp"
 
+#include <cassert>
 #include <stdexcept>
 #include <utility>
 
@@ -79,7 +80,7 @@ namespace vcpp
 
         logicalDevice.bindBufferMemory( *buffer, *memory, 0u );
 
-        return { std::move( buffer ), std::move( memory ) };
+        return { std::move( buffer ), std::move( memory ), size };
     }
 
     auto copyDataToBuffer(
@@ -88,6 +89,8 @@ namespace vcpp
         const GPUBuffer& buffer
     ) -> void
     {
+        assert( data.size() <= buffer.size );
+
         const auto mappedMemory = logicalDevice.mapMemory( *buffer.memory, 0, data.size() );
         std::memcpy( mappedMemory, data.data(), data.size() );
         logicalDevice.unmapMemory( *buffer.memory );

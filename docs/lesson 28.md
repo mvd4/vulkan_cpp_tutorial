@@ -501,7 +501,191 @@ catch ( const vk::OutOfDateKHRError& )
 }
 ```
 
-...which, I think, is much better than before[^4]
+...which, I think, is much better than before[^4].
+
+We're almost done, but there are still a few things about our implementation that aren't quite right yet and that I want to address today.
+
+## Final touches
+First of all, `Renderer` doesn't protect its invariants. There's nothing stopping anyone from assigning a different pipeline that doesn't match the layout, or from clearing one of the buffer vectors at any time. So let's make `Renderer` a class and its members private. Let's also delete the copy and move operations, just like we did for `Swapchain`. The consequence, of course, is that a free-standing `drawFrame` function cannot access the members anymore, so let's pull that in as well:
+```cpp
+// rendering.hpp
+class Renderer
+{
+public:
+
+    Renderer(
+        const vk::PhysicalDevice& physicalDevice,
+        const LogicalDevice& logicalDevice,
+        const vk::ShaderModule& vertexShader,
+        const vk::ShaderModule& fragmentShader,
+        vk::Format colorFormat,
+        std::span< const vk::Format > vertexFormats,
+        std::uint64_t sizeVertexDataInBytes,
+        std::uint32_t maxFramesInFlight
+    );
+
+    Renderer( const Renderer& ) = delete;
+    Renderer( Renderer&& ) = delete;
+    auto operator=( const Renderer& ) -> Renderer& = delete;
+    auto operator=( Renderer&& ) -> Renderer& = delete;
+
+    auto drawFrame(
+        const SceneData& sceneData,
+        const vk::Queue& queue,
+        const Swapchain::FrameData& frame,
+        const vk::Extent2D& imageExtent
+    ) -> void;
+
+    auto getRenderPass() const -> vk::RenderPass { return *m_renderPass; }
+
+private:
+
+    vk::Device m_logicalDevice;
+
+    vk::UniqueRenderPass m_renderPass;
+    vk::UniquePipelineLayout m_pipelineLayout;
+    vk::UniquePipeline m_pipeline;
+    vk::UniqueCommandPool m_commandPool;
+
+    std::vector< GPUBuffer > m_vertexBuffers;
+    std::vector< vk::CommandBuffer > m_commandBuffers;
+};
+```
+
+Since `drawFrame` is now a member function, it no longer needs the `logicalDevice` and `renderer` parameters. That's why we store the logical device as a member, and why `drawFrame` uses `m_vertexBuffers`, `m_commandBuffers` etc. instead of `renderer.vertexBuffers` and so on. And since `recordCommandBuffer` is now only called by `Renderer::drawFrame`, we can remove its declaration from `rendering.hpp` and move its definition into an anonymous namespace in `rendering.cpp`, turning it into an implementation detail of our renderer.
+
+The one last thing that I want to fix is a violation of the design concept we introduced earlier: we wanted to structure our code according to the data it processes and how often that data changes. In that context, we said that the vertex data can change frame by frame, including the number of vertices. However, our current `Renderer` takes the size of the vertex buffers as a constructor argument, so that size can never change during the lifetime of a `Renderer` object. That's not good.
+
+The only reason we need `sizeVertexDataInBytes` is that we allocate the buffers in the constructor. If we want to be able to accept a different number of vertices with every frame, we also need to be able to adjust the buffer size accordingly. The solution thus is to move the buffer allocation out of the constructor and into `drawFrame`, which receives the scene data anyway and therefore knows how much memory we need. In pseudo code that would look something like this[^5]:
+```text
+if ( buffer for current frame does not exist or isn't large enough )
+{
+    allocate buffer for current frame
+}
+```
+
+To decide whether an existing buffer is still large enough, we first need to know how large it is. So let's add a `size` member to `GPUBuffer` and fill it in `createGPUBuffer`:
+```cpp
+// memory.hpp
+struct GPUBuffer
+{
+    vk::UniqueBuffer buffer;
+    vk::UniqueDeviceMemory memory;
+    vk::DeviceSize size = 0;
+};
+```
+
+```cpp
+// memory.cpp
+auto createGPUBuffer(
+    ...
+) -> GPUBuffer
+{
+    ...
+    return { std::move( buffer ), std::move( memory ), size };
+}
+```
+
+And while we're at it, we can also use the new member to protect `copyDataToBuffer` against writing past the end of the buffer:
+```cpp
+// memory.cpp
+#include <cassert>
+...
+auto copyDataToBuffer(
+    const vk::Device& logicalDevice,
+    std::span< const std::byte > data,
+    const GPUBuffer& buffer
+) -> void
+{
+    assert( data.size() <= buffer.size );
+    ...
+}
+```
+
+Next, we remove the `sizeVertexDataInBytes` parameter from the `Renderer` constructor. Instead of allocating the buffers, the constructor now just creates `maxFramesInFlight` empty `GPUBuffer` objects. Because `createGPUBuffer` needs the physical device to find a suitable memory type, and we're now calling it from `drawFrame`, we also have to store the physical device as a member:
+```cpp
+// rendering.hpp
+class Renderer
+{
+public:
+
+    Renderer(
+        const vk::PhysicalDevice& physicalDevice,
+        const LogicalDevice& logicalDevice,
+        const vk::ShaderModule& vertexShader,
+        const vk::ShaderModule& fragmentShader,
+        vk::Format colorFormat,
+        std::span< const vk::Format > vertexFormats,
+        std::uint32_t maxFramesInFlight
+    );
+    ...
+
+private:
+
+    vk::PhysicalDevice m_physicalDevice;
+    vk::Device m_logicalDevice;
+    ...
+};
+```
+
+```cpp
+// rendering.cpp
+Renderer::Renderer(
+    const vk::PhysicalDevice& physicalDevice,
+    const LogicalDevice& logicalDevice,
+    const vk::ShaderModule& vertexShader,
+    const vk::ShaderModule& fragmentShader,
+    vk::Format colorFormat,
+    std::span< const vk::Format > vertexFormats,
+    std::uint32_t maxFramesInFlight
+)
+    : m_physicalDevice{ physicalDevice }
+    , m_logicalDevice{ logicalDevice }
+    , m_renderPass{ createRenderPass( logicalDevice, colorFormat ) }
+    ...
+    , m_vertexBuffers( maxFramesInFlight )
+{
+    const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
+        .setCommandPool( *m_commandPool )
+        .setLevel( vk::CommandBufferLevel::ePrimary )
+        .setCommandBufferCount( maxFramesInFlight );
+    m_commandBuffers = logicalDevice->allocateCommandBuffers( commandBufferAllocateInfo );
+}
+```
+
+And now we can allocate the buffers in `drawFrame`, following our pseudo code:
+```cpp
+// rendering.cpp
+auto Renderer::drawFrame(
+    const SceneData& sceneData,
+    const vk::Queue& queue,
+    const Swapchain::FrameData& frame,
+    const vk::Extent2D& imageExtent
+) -> void
+{
+    assert( m_vertexBuffers.size() > frame.frameInFlightIndex );
+    assert( !sceneData.vertexData.empty() );
+
+    auto& gpuVertexBuffer = m_vertexBuffers[ frame.frameInFlightIndex ];
+
+    if ( gpuVertexBuffer.size < sceneData.vertexData.size() )
+    {
+        gpuVertexBuffer = createGPUBuffer(
+            m_physicalDevice,
+            m_logicalDevice,
+            sceneData.vertexData.size(),
+            vk::BufferUsageFlagBits::eVertexBuffer
+        );
+    }
+
+    copyDataToBuffer( m_logicalDevice, sceneData.vertexData, gpuVertexBuffer );
+    ...
+}
+```
+
+Once you've adjusted the calls in `main()` to the changed function signatures, everything should compile and run as before. The difference is that now we could change the geometry whenever we want, simply by modifiying the vertex buffer.
+
+And with that, I think we're well prepared to dive into the more interesting aspects of 3D rendering: lighting, texturing, and the like. But that's for the upcoming lessons, for today we've done enough. Thanks for seeing this through with me and see you next time.
 
 
 ---
@@ -509,4 +693,5 @@ catch ( const vk::OutOfDateKHRError& )
 [^1]: If your application still needs to do work while the window is minimized - background tasks, network I/O, animations that should keep running - you can use `glfwWaitEventsTimeout( double timeout )` instead. It behaves just like `glfwWaitEvents`, but returns after at most `timeout` seconds so you get a chance to do periodic work.
 [^2]: In fact, we'd ideally want to decouple the *simulation* entirely from the *rendering*, but that's out of scope for this lesson.
 [^3]: See the [Dynamic State](https://docs.vulkan.org/spec/latest/chapters/pipelines.html#pipelines-dynamic-state) section of the Vulkan specification for the full list of states that can be made dynamic.
-[^4]: We still have a few asymmetries that I'd want to fix eventually, but for now I think it's good enough. Also note that I had to change the result-check to `!=eSuccess`, because the function can now return different result codes instead of throwing.
+[^4]: We still have a few asymmetries that I'd want to fix eventually, but for now I think it's good enough. Also note that I had to change the result-check to `!= vk::Result::eSuccess`, because the function can now return different result codes instead of throwing.
+[^5]: We only ever *grow* the buffers, we never shrink them. If we reallocated whenever the size changed, a scene whose size alternates between two values would cause a reallocation every single frame. Real engines often go one step further and allocate some headroom (e.g. 1.5 times the requested size), so that a slowly growing scene doesn't trigger a reallocation every frame either. For our purposes, the exact size is good enough.

@@ -33,6 +33,7 @@ namespace vcpp
     {
         vk::UniqueBuffer buffer;
         vk::UniqueDeviceMemory memory;
+        vk::DeviceSize size = 0;
     };
 
     auto findSuitableMemoryIndex(
