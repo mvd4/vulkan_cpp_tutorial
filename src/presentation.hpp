@@ -69,13 +69,20 @@ namespace vcpp
 
         operator vk::SwapchainKHR() const { return *m_swapchain; }
 
+        auto getImageExtent() const -> vk::Extent2D { return m_imageExtent; }
+
         auto getNextFrame() -> FrameData;
+        auto present(
+            const vk::Queue& queue,
+            const FrameData& frame
+        ) -> vk::Result;
 
     private:
 
         vk::Device m_logicalDevice;
         vk::UniqueSwapchainKHR m_swapchain;
 
+        vk::Extent2D m_imageExtent;
         std::uint32_t m_currentFrameIndex = 0;
 
         std::vector< vk::UniqueImageView > m_imageViews;

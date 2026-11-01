@@ -96,7 +96,6 @@ auto main() -> int
         };
 
         std::unique_ptr< vcpp::Swapchain > swapchain;
-        vk::Extent2D swapchainExtent;
 
         constexpr size_t vertexCount = 36;
         const std::array< Vertex, vertexCount > vertices = {
@@ -188,7 +187,7 @@ auto main() -> int
                 swapchain.reset();
 
                 const auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR( *surface );
-                swapchainExtent = capabilities.currentExtent;
+                const auto swapchainExtent = capabilities.currentExtent;
 
                 swapchain = vcpp::createSwapchain(
                     physicalDevice,
@@ -228,38 +227,21 @@ auto main() -> int
             try
             {
                 const auto frame = swapchain->getNextFrame();
-                const auto& gpuVertexBuffer = renderer.vertexBuffers[ frame.frameInFlightIndex ];
 
-                vcpp::copyDataToBuffer( logicalDevice, verticesTemp, gpuVertexBuffer );
-
-                vcpp::recordCommandBuffer(
-                    renderer.commandBuffers[ frame.frameInFlightIndex ],
-                    *renderer.pipeline,
-                    *renderer.renderPass,
-                    frame.framebuffer,
-                    swapchainExtent,
-                    *gpuVertexBuffer.buffer,
-                    vertexCount
+                vcpp::drawFrame(
+                    logicalDevice,
+                    vcpp::SceneData{
+                        std::as_bytes( std::span{ verticesTemp } ),
+                        vertexCount
+                    },
+                    renderer,
+                    queue,
+                    frame,
+                    swapchain->getImageExtent()
                 );
 
-                const vk::PipelineStageFlags waitStages[] = {
-                    vk::PipelineStageFlagBits::eColorAttachmentOutput };
-                const auto submitInfo = vk::SubmitInfo{}
-                    .setCommandBuffers( renderer.commandBuffers[ frame.frameInFlightIndex ] )
-                    .setWaitSemaphores( frame.readyForRenderingSemaphore )
-                    .setSignalSemaphores( frame.readyForPresentingSemaphore )
-                    .setWaitDstStageMask( waitStages );
-
-                queue.submit( submitInfo, frame.inFlightFence );
-
-                const auto swapchains = std::array< vk::SwapchainKHR, 1 >{ *swapchain };
-                const auto presentInfo = vk::PresentInfoKHR{}
-                    .setSwapchains( swapchains )
-                    .setImageIndices( frame.swapchainImageIndex )
-                    .setWaitSemaphores( frame.readyForPresentingSemaphore );
-
-                const auto result = queue.presentKHR( presentInfo );
-                if ( result == vk::Result::eSuboptimalKHR )
+                const auto result = swapchain->present( queue, frame );
+                if ( result != vk::Result::eSuccess )
                     framebufferSizeChanged = true;
             }
             catch ( const vk::OutOfDateKHRError& )

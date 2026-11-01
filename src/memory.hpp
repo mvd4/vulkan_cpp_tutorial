@@ -25,6 +25,7 @@ License.
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <span>
 
 namespace vcpp
 {
@@ -49,6 +50,12 @@ namespace vcpp
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
     ) -> GPUBuffer;
 
+    auto copyDataToBuffer(
+        const vk::Device& logicalDevice,
+        std::span< const std::byte > data,
+        const GPUBuffer& buffer
+    ) -> void;
+
     template< typename T, size_t N >
     auto copyDataToBuffer(
         const vk::Device& logicalDevice,
@@ -56,10 +63,7 @@ namespace vcpp
         const GPUBuffer& buffer
     ) -> void
     {
-        const auto numBytesToCopy = sizeof( data );
-        const auto mappedMemory = logicalDevice.mapMemory( *buffer.memory, 0, numBytesToCopy );
-        std::memcpy( mappedMemory, data.data(), numBytesToCopy );
-        logicalDevice.unmapMemory( *buffer.memory );
+        copyDataToBuffer( logicalDevice, std::as_bytes( std::span{ data } ), buffer );
     }
 
     template< typename T, size_t N >

@@ -21,6 +21,7 @@ License.
 
 #include "devices.hpp"
 #include "memory.hpp"
+#include "presentation.hpp"
 
 #include <vulkan/vulkan.hpp>
 
@@ -68,5 +69,14 @@ namespace vcpp
         const vk::Extent2D& renderExtent,
         const vk::Buffer& vertexBuffer,
         std::uint32_t vertexCount
+    ) -> void;
+
+    auto drawFrame(
+        const vk::Device& logicalDevice,
+        const SceneData& sceneData,
+        const Renderer& renderer,
+        const vk::Queue& queue,
+        const Swapchain::FrameData& frame,
+        const vk::Extent2D& imageExtent
     ) -> void;
 }

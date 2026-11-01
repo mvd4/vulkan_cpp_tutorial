@@ -82,4 +82,14 @@ namespace vcpp
         return { std::move( buffer ), std::move( memory ) };
     }
 
+    auto copyDataToBuffer(
+        const vk::Device& logicalDevice,
+        std::span< const std::byte > data,
+        const GPUBuffer& buffer
+    ) -> void
+    {
+        const auto mappedMemory = logicalDevice.mapMemory( *buffer.memory, 0, data.size() );
+        std::memcpy( mappedMemory, data.data(), data.size() );
+        logicalDevice.unmapMemory( *buffer.memory );
+    }
 }

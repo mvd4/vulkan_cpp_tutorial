@@ -116,4 +116,38 @@ namespace vcpp
 
         commandBuffer.end();
     }
+
+    auto drawFrame(
+        const vk::Device& logicalDevice,
+        const SceneData& sceneData,
+        const Renderer& renderer,
+        const vk::Queue& queue,
+        const Swapchain::FrameData& frame,
+        const vk::Extent2D& imageExtent
+    ) -> void
+    {
+        const auto& gpuVertexBuffer = renderer.vertexBuffers[ frame.frameInFlightIndex ];
+
+        copyDataToBuffer( logicalDevice, sceneData.vertexData, gpuVertexBuffer );
+
+        recordCommandBuffer(
+            renderer.commandBuffers[ frame.frameInFlightIndex ],
+            *renderer.pipeline,
+            *renderer.renderPass,
+            frame.framebuffer,
+            imageExtent,
+            *gpuVertexBuffer.buffer,
+            sceneData.vertexCount
+        );
+
+        const vk::PipelineStageFlags waitStages[] = {
+            vk::PipelineStageFlagBits::eColorAttachmentOutput };
+        const auto submitInfo = vk::SubmitInfo{}
+            .setCommandBuffers( renderer.commandBuffers[ frame.frameInFlightIndex ] )
+            .setWaitSemaphores( frame.readyForRenderingSemaphore )
+            .setSignalSemaphores( frame.readyForPresentingSemaphore )
+            .setWaitDstStageMask( waitStages );
+
+        queue.submit( submitInfo, frame.inFlightFence );
+    }
 }

@@ -207,6 +207,7 @@ namespace vcpp
     )
         : m_logicalDevice{ logicalDevice }
         , m_swapchain{ createSwapchainInternal( logicalDevice, surface, surfaceFormat, imageExtent, requestedSwapchainImageCount ) }
+        , m_imageExtent{ imageExtent }
         , m_imageViews{ createSwapchainImageViews( logicalDevice, *m_swapchain, surfaceFormat.format ) }
         , m_depthImages{ createDepthImages( physicalDevice, logicalDevice, imageExtent, m_imageViews.size() ) }
         , m_depthImageViews{ createDepthImageViews( logicalDevice, m_depthImages ) }
@@ -261,6 +262,28 @@ namespace vcpp
 
         m_currentFrameIndex = ( m_currentFrameIndex + 1 ) % m_inFlightFences.size();
         return frame;
+    }
+
+    auto Swapchain::present(
+        const vk::Queue& queue,
+        const FrameData& frame
+    ) -> vk::Result
+    {
+        const auto swapchains = std::array< vk::SwapchainKHR, 1 >{ *m_swapchain };
+        const auto presentInfo = vk::PresentInfoKHR{}
+            .setSwapchains( swapchains )
+            .setImageIndices( frame.swapchainImageIndex )
+            .setWaitSemaphores( frame.readyForPresentingSemaphore );
+
+        try
+        {
+            return queue.presentKHR( presentInfo );
+        }
+        catch ( const vk::OutOfDateKHRError& )
+        {
+            // the swapchain no longer matches the surface and needs to be recreated
+            return vk::Result::eErrorOutOfDateKHR;
+        }
     }
 
     auto createSwapchain(

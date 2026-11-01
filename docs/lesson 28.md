@@ -362,9 +362,151 @@ I'll leave the necessary changes in `main.cpp` to make use of this struct as an 
 
 If you compile and run this version, everything should work as before.
 
+Alright, this helped us move quite a bit of code that was scattered across our `main()` function to a more structured place, which is good. But the actual drawing code still resides in `main()`, and moving that out was the whole point of the exercise. So let's finally do that and create a `drawFrame` function:
+
+```cpp
+// rendering.cpp
+auto drawFrame(
+    const vk::Device& logicalDevice,
+    const SceneData& sceneData,
+    const Renderer& renderer,
+    const vk::Queue& queue,
+    const Swapchain::FrameData& frame,
+    const vk::Extent2D& imageExtent
+) -> void
+{
+    const auto& gpuVertexBuffer = renderer.vertexBuffers[ frame.frameInFlightIndex ];
+
+    copyDataToBuffer( logicalDevice, sceneData.vertexData, gpuVertexBuffer );
+
+    recordCommandBuffer(
+        renderer.commandBuffers[ frame.frameInFlightIndex ],
+        *renderer.pipeline,
+        *renderer.renderPass,
+        frame.framebuffer,
+        imageExtent,
+        *gpuVertexBuffer.buffer,
+        sceneData.vertexCount
+    );
+
+    const vk::PipelineStageFlags waitStages[] = {
+        vk::PipelineStageFlagBits::eColorAttachmentOutput };
+    const auto submitInfo = vk::SubmitInfo{}
+        .setCommandBuffers( renderer.commandBuffers[ frame.frameInFlightIndex ] )
+        .setWaitSemaphores( frame.readyForRenderingSemaphore )
+        .setSignalSemaphores( frame.readyForPresentingSemaphore )
+        .setWaitDstStageMask( waitStages );
+
+    queue.submit( submitInfo, frame.inFlightFence );
+}
+```
+
+For this code to work, we need to add an overload to `copyDataToBuffer` that accepts a span. While we're at it, we can actually implement the array-based implementation with a forwarding call to this new function:
+```cpp
+// memory.hpp
+auto copyDataToBuffer(
+    const vk::Device& logicalDevice,
+    std::span< const std::byte > data,
+    const GPUBuffer& buffer
+) -> void;
+
+template< typename T, size_t N >
+auto copyDataToBuffer(
+    const vk::Device& logicalDevice,
+    const std::array< T, N >& data,
+    const GPUBuffer& buffer
+) -> void
+{
+    copyDataToBuffer( logicalDevice, std::as_bytes( std::span{ data } ), buffer );
+}
+```
+
+Replacing the drawing code in `main()` with a call to `drawFrame` does indeed make the loop a bit shorter and more readable. But we can do better: the function call is at a different level of abstraction than the presentation code that follows it, which is something I try to avoid. So let's move the presenting code to the swapchain, along with the swapchain extent (which I should have put there in the first place):
+```cpp
+// presentation.hpp
+class Swapchain
+{
+public:
+    ...
+    auto getImageExtent() const -> vk::Extent2D { return m_imageExtent; }
+
+    auto getNextFrame() -> FrameData;
+    auto present(
+        const vk::Queue& queue,
+        const FrameData& frame
+    ) -> vk::Result;
+
+private:
+
+    vk::Device m_logicalDevice;
+    vk::UniqueSwapchainKHR m_swapchain;
+
+    vk::Extent2D m_imageExtent;
+    ...
+};
+```
+
+```cpp
+// presentation.cpp
+auto Swapchain::present(
+    const vk::Queue& queue,
+    const FrameData& frame
+) -> vk::Result
+{
+    const auto swapchains = std::array< vk::SwapchainKHR, 1 >{ *m_swapchain };
+    const auto presentInfo = vk::PresentInfoKHR{}
+        .setSwapchains( swapchains )
+        .setImageIndices( frame.swapchainImageIndex )
+        .setWaitSemaphores( frame.readyForPresentingSemaphore );
+
+    try
+    {
+        return queue.presentKHR( presentInfo );
+    }
+    catch ( const vk::OutOfDateKHRError& )
+    {
+        // the swapchain no longer matches the surface and needs to be recreated
+        return vk::Result::eErrorOutOfDateKHR;
+    }
+}
+```
+
+With that, the try-catch block in the main loop is reduced to:
+```cpp
+// main.cpp
+try
+{
+    const auto frame = swapchain->getNextFrame();
+
+    vcpp::drawFrame(
+        logicalDevice,
+        vcpp::SceneData{
+            std::as_bytes( std::span{ verticesTemp } ),
+            vertexCount
+        },
+        renderer,
+        queue,
+        frame,
+        swapchain->getImageExtent()
+    );
+
+    const auto result = swapchain->present( queue, frame );
+    if ( result != vk::Result::eSuccess )
+        framebufferSizeChanged = true;
+}
+catch ( const vk::OutOfDateKHRError& )
+{
+    // the swapchain no longer matches the surface and needs to be recreated
+    framebufferSizeChanged = true;
+}
+```
+
+...which, I think, is much better than before[^4]
+
 
 ---
 
 [^1]: If your application still needs to do work while the window is minimized - background tasks, network I/O, animations that should keep running - you can use `glfwWaitEventsTimeout( double timeout )` instead. It behaves just like `glfwWaitEvents`, but returns after at most `timeout` seconds so you get a chance to do periodic work.
 [^2]: In fact, we'd ideally want to decouple the *simulation* entirely from the *rendering*, but that's out of scope for this lesson.
 [^3]: See the [Dynamic State](https://docs.vulkan.org/spec/latest/chapters/pipelines.html#pipelines-dynamic-state) section of the Vulkan specification for the full list of states that can be made dynamic.
+[^4]: We still have a few asymmetries that I'd want to fix eventually, but for now I think it's good enough. Also note that I had to change the result-check to `!=eSuccess`, because the function can now return different result codes instead of throwing.
