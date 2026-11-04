@@ -79,13 +79,19 @@ namespace vcpp
 
     auto createGraphicsPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout
     {
-        const auto range = vk::PushConstantRange{}
-            .setStageFlags( vk::ShaderStageFlagBits::eVertex )
-            .setOffset( 0 )
-            .setSize( sizeof( glm::mat4 ) );
+        const auto ranges = std::array< vk::PushConstantRange, 2 >{
+            vk::PushConstantRange{}
+                .setStageFlags( vk::ShaderStageFlagBits::eVertex )
+                .setOffset( 0 )
+                .setSize( sizeof( glm::mat4 ) ),
+            vk::PushConstantRange{}
+                .setStageFlags( vk::ShaderStageFlagBits::eFragment )
+                .setOffset( sizeof( glm::mat4 ) )
+                .setSize( sizeof( glm::vec4 ) ),
+        };
 
         const auto info = vk::PipelineLayoutCreateInfo{}
-            .setPushConstantRanges( range );
+            .setPushConstantRanges( ranges );
 
         return logicalDevice.createPipelineLayoutUnique( info );
     }

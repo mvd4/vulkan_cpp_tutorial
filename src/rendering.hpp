@@ -43,6 +43,7 @@ namespace vcpp
         std::uint32_t vertexCount;
         std::uint32_t vertexDataVersion;
         glm::mat4 mvpMatrix;
+        glm::vec4 ambientColor;
     };
 
     class Renderer

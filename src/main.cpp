@@ -166,6 +166,10 @@ auto main() -> int
 
         float rotationAngle = 0.f;
         constexpr float rotationSpeed = glm::radians( 45.f );
+
+        float ambientColorPhase = 0.f;
+        constexpr float twoThirdsPi = glm::radians( 120.f );
+
         auto lastFrameTime = std::chrono::steady_clock::now();
 
         while ( !glfwWindowShouldClose( window.get() ) )
@@ -218,6 +222,14 @@ auto main() -> int
             model = glm::rotate( glm::identity< glm::mat4 >(), rotationAngle, glm::vec3{ 0.f, 1.f, 0.f } );
             const auto mvp = projection * view * model;
 
+            ambientColorPhase = std::fmod( ambientColorPhase + deltaTime, glm::two_pi< float >() );
+            const auto ambientColor = glm::vec4{
+                0.5f + 0.5f * std::sin( ambientColorPhase ),
+                0.5f + 0.5f * std::sin( ambientColorPhase + twoThirdsPi ),
+                0.5f + 0.5f * std::sin( ambientColorPhase + 2.f * twoThirdsPi ),
+                1.f
+            };
+
             try
             {
                 const auto frame = swapchain->getNextFrame();
@@ -227,7 +239,8 @@ auto main() -> int
                         .vertexData = std::as_bytes( std::span{ vertices } ),
                         .vertexCount = vertexCount,
                         .vertexDataVersion = 0,
-                        .mvpMatrix = mvp
+                        .mvpMatrix = mvp,
+                        .ambientColor = ambientColor
                     },
                     queue,
                     frame,

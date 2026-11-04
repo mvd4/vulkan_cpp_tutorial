@@ -235,6 +235,156 @@ Note that I've switched to *designated initializers*, a C++20 feature that lets 
 Compile and run this version, and the cube should rotate just as before. But now each vertex buffer is only filled once, instead of in every single frame.
 
 
+## Ambient lighting
+So let's finally get to implementing something that visibly changes our rendered images again: Ambient lighting is a cheap approximation of indirect light, i.e. the light that has bounced off other surfaces in a scene before reaching an object.
+
+In reality, a surface facing away from every light source is rarely pitch black, because photons scatter off walls, floors, dust, and the sky and eventually land on it. Simulating all those bounces properly would be extremely computationally expensive. Ambient lighting fakes it with a single constant: every fragment gets a baseline amount of light regardless of its orientation or position.
+
+The math for that is as simple as it gets:
+```glsl
+vec3 ambient = ambientStrength * lightColor;
+outColor = ambient * objectColor;
+```
+
+So we need to calculate the color of every fragment by multiplying it by the ambient light term. This seems like a really good use for our push constants, so let's implement an ambient light source that changes color over time for our scene. Since strength and color are both constant for the whole frame, we'll calculate `ambientStrength * lightColor` on the CPU and pass the result to the shader as a single ambient color.
+
+Lighting is the domain of the fragment shader, so let's first add a second push constant range to our pipeline layout, this time the size of a four-dimensional vector for the ambient color.
+```cpp
+// pipelines.cpp
+auto createGraphicsPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout
+{
+    const auto ranges = std::array< vk::PushConstantRange, 2 >{
+        vk::PushConstantRange{}
+            .setStageFlags( vk::ShaderStageFlagBits::eVertex )
+            .setOffset( 0 )
+            .setSize( sizeof( glm::mat4 ) ),
+        vk::PushConstantRange{}
+            .setStageFlags( vk::ShaderStageFlagBits::eFragment )
+            .setOffset( sizeof( glm::mat4 ) )
+            .setSize( sizeof( glm::vec4 ) ),
+    };
+
+    const auto info = vk::PipelineLayoutCreateInfo{}
+        .setPushConstantRanges( ranges );
+
+    return logicalDevice.createPipelineLayoutUnique( info );
+}
+```
+
+We'll then need to pass the data to the command buffer, so we add the ambient light color to the `SceneData` struct and push it while recording the command buffer:
+```cpp
+// rendering.hpp
+struct SceneData
+{
+    std::span< const std::byte > vertexData;
+    std::uint32_t vertexCount;
+    std::uint32_t vertexDataVersion;
+    glm::mat4 mvpMatrix;
+    glm::vec4 ambientColor;
+};
+```
+
+```cpp
+// rendering.cpp
+auto Renderer::recordCommandBuffer(
+    const vk::CommandBuffer& commandBuffer,
+    const vk::Framebuffer& frameBuffer,
+    const vk::Extent2D& renderExtent,
+    const vk::Buffer& vertexBuffer,
+    const SceneData& sceneData
+) const -> void
+{
+    ...
+
+    commandBuffer.bindPipeline( vk::PipelineBindPoint::eGraphics, *m_pipeline );
+
+    commandBuffer.pushConstants< glm::mat4 >(
+        *m_pipelineLayout,
+        vk::ShaderStageFlagBits::eVertex,
+        0,
+        sceneData.mvpMatrix
+    );
+
+    commandBuffer.pushConstants< glm::vec4 >(
+        *m_pipelineLayout,
+        vk::ShaderStageFlagBits::eFragment,
+        sizeof( glm::mat4 ),
+        sceneData.ambientColor
+    );
+    ...
+}
+```
+Note the offset of `sizeof( glm::mat4 )` that we have to set for the ambient color push constant. As mentioned, there's only one block of push constant data for all shader stages, and each range is a view into that block. So the ambient color needs its own place in the block, and we put it directly after the matrix. Otherwise, the two ranges would overlap, and pushing the color would overwrite parts of the matrix.
+
+`drawFrame` passes the `SceneData` on to `recordCommandBuffer` as a whole, so it doesn't need any changes. In our render loop, we can now create the changing light color and pass it to `drawFrame`:
+```cpp
+// main.cpp
+...
+float rotationAngle = 0.f;
+constexpr float rotationSpeed = glm::radians( 45.f );
+
+float ambientColorPhase = 0.f;
+constexpr float twoThirdsPi = glm::radians( 120.f );
+
+auto lastFrameTime = std::chrono::steady_clock::now();
+
+while ( !glfwWindowShouldClose( window.get() ) )
+{
+    ...
+    const auto mvp = projection * view * model;
+
+    ambientColorPhase = std::fmod( ambientColorPhase + deltaTime, glm::two_pi< float >() );
+    const auto ambientColor = glm::vec4{
+        0.5f + 0.5f * std::sin( ambientColorPhase ),
+        0.5f + 0.5f * std::sin( ambientColorPhase + twoThirdsPi ),
+        0.5f + 0.5f * std::sin( ambientColorPhase + 2.f * twoThirdsPi ),
+        1.f
+    };
+
+    try
+    {
+        const auto frame = swapchain->getNextFrame();
+
+        renderer.drawFrame(
+            vcpp::SceneData{
+                .vertexData = std::as_bytes( std::span{ vertices } ),
+                .vertexCount = vertexCount,
+                .vertexDataVersion = 0,
+                .mvpMatrix = mvp,
+                .ambientColor = ambientColor
+            },
+            queue,
+            frame,
+            swapchain->getImageExtent()
+        );
+        ...
+    }
+    ...
+}
+```
+
+Each color channel follows its own sine wave, mapped from the range [-1, 1] to [0, 1]. Because the three waves are shifted by a third of a period against each other, the channels peak one after another, and the light cycles through all hues. Just like the rotation angle, we wrap the phase around at 2π. Otherwise, the value would grow forever and lose floating point precision after the application has been running for a long time.
+
+And finally we have to teach our fragment shader how to use the push constant:
+```glsl
+// fragment.frag
+...
+
+layout( push_constant ) uniform PushConstants
+{
+    layout( offset = 64 ) vec4 ambientColor;
+} pushConstants;
+
+void main()
+{
+    outColor = inColor * pushConstants.ambientColor;
+}
+```
+Here too, we have to make sure we declare the offset of the push constant correctly, but since the fragment shader doesn't use the matrix, it doesn't need to declare it.
+
+Compile and run this version. You'll see that the surfaces of our cube now change color periodically. The red, green, and blue faces of our cube each have a single primary color, so they get almost completely dark whenever the light contains hardly any of that color. Our blue face, for example, turns nearly black while the blue channel of the light is close to zero. The yellow, violet, and turquoise faces, on the other hand, never go completely dark: they each reflect two of the three channels, and at least one of those is always lit.
+
+
 ---
 
 [^1]: For example, we could upload the vertex data only once, in a separate function that waits for the GPU to become idle first. Or we could keep the vertex data in device-local memory, which is faster for the GPU to read, and fill it via a staging buffer, as mentioned in lesson 27. We already used staging buffers for our compute shader in lesson 12, and we'll come back to them for vertex data later in the tutorial.
