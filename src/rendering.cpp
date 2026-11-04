@@ -54,6 +54,7 @@ namespace vcpp
                 .setQueueFamilyIndex( logicalDevice.queueFamilyIndex )
         ) }
         , m_vertexBuffers( maxFramesInFlight )
+        , m_vertexDataVersions( maxFramesInFlight, 0 )
     {
         const auto commandBufferAllocateInfo = vk::CommandBufferAllocateInfo{}
             .setCommandPool( *m_commandPool )
@@ -73,6 +74,7 @@ namespace vcpp
         assert( !sceneData.vertexData.empty() );
 
         auto& gpuVertexBuffer = m_vertexBuffers[ frame.frameInFlightIndex ];
+        bool needsUpload = m_vertexDataVersions[ frame.frameInFlightIndex ] != sceneData.vertexDataVersion;
 
         if ( gpuVertexBuffer.size < sceneData.vertexData.size() )
         {
@@ -82,9 +84,14 @@ namespace vcpp
                 sceneData.vertexData.size(),
                 vk::BufferUsageFlagBits::eVertexBuffer
             );
+            needsUpload = true;
         }
 
-        copyDataToBuffer( m_logicalDevice, sceneData.vertexData, gpuVertexBuffer );
+        if ( needsUpload )
+        {
+            copyDataToBuffer( m_logicalDevice, sceneData.vertexData, gpuVertexBuffer );
+            m_vertexDataVersions[ frame.frameInFlightIndex ] = sceneData.vertexDataVersion;
+        }
 
         recordCommandBuffer(
             m_commandBuffers[ frame.frameInFlightIndex ],

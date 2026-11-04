@@ -168,8 +168,6 @@ auto main() -> int
         constexpr float rotationSpeed = glm::radians( 45.f );
         auto lastFrameTime = std::chrono::steady_clock::now();
 
-        auto verticesTemp = vertices;
-
         while ( !glfwWindowShouldClose( window.get() ) )
         {
             glfwPollEvents();
@@ -226,9 +224,10 @@ auto main() -> int
 
                 renderer.drawFrame(
                     vcpp::SceneData{
-                        std::as_bytes( std::span{ vertices } ),
-                        vertexCount,
-                        mvp
+                        .vertexData = std::as_bytes( std::span{ vertices } ),
+                        .vertexCount = vertexCount,
+                        .vertexDataVersion = 0,
+                        .mvpMatrix = mvp
                     },
                     queue,
                     frame,

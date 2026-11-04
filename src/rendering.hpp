@@ -41,6 +41,7 @@ namespace vcpp
     {
         std::span< const std::byte > vertexData;
         std::uint32_t vertexCount;
+        std::uint32_t vertexDataVersion;
         glm::mat4 mvpMatrix;
     };
 
@@ -91,6 +92,7 @@ namespace vcpp
         vk::UniqueCommandPool m_commandPool;
 
         std::vector< GPUBuffer > m_vertexBuffers;
+        std::vector< std::uint32_t > m_vertexDataVersions;
         std::vector< vk::CommandBuffer > m_commandBuffers;
     };
 }

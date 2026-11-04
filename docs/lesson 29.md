@@ -136,3 +136,105 @@ void main()
 The layout declaration informs the shader about the push constant layout to expect, in our case only one 4x4 matrix. The block name (`PushConstants`) is required by the GLSL interface block grammar, but isn't used for matching the data: there can only be one push constant block per shader stage, and its members are matched to the pushed bytes by their offsets. That's why the shader's layout must agree with the `PushConstantRange`. Note that GLSL matrices are column-major by default, just like GLM's, so we can pass the matrix as it is without transposing it. The instance name (`pushConstants`) is optional, but it lets us qualify the members when using them and thus makes the code a bit more readable.
 
 Compile and run this version: you should see the rotating cube again.
+
+There's one thing that still isn't great about this solution, though: our vertex data no longer changes, but we still upload it every frame. There are multiple ways to address this,[^1] but since I want to move on to ambient lighting as soon as possible, I'm going to go for a simple one for now: let's give our vertex data a version and only upload it when that version changes:
+```cpp
+// rendering.hpp
+struct SceneData
+{
+    std::span< const std::byte > vertexData;
+    std::uint32_t vertexCount;
+    std::uint32_t vertexDataVersion;
+    glm::mat4 mvpMatrix;
+};
+```
+
+The renderer, in turn, needs to remember which version of the data each of its vertex buffers currently holds. We have one vertex buffer per frame in flight, so a single version number wouldn't be enough: after a change, each of the buffers has to be updated the next time its frame comes around. So we add a vector of versions next to the vector of buffers:
+```cpp
+// rendering.hpp
+class Renderer
+{
+    ...
+private:
+    ...
+    std::vector< GPUBuffer > m_vertexBuffers;
+    std::vector< std::uint32_t > m_vertexDataVersions;
+    std::vector< vk::CommandBuffer > m_commandBuffers;
+};
+```
+
+```cpp
+// rendering.cpp
+Renderer::Renderer(
+    ...
+)
+    : ...
+    , m_vertexBuffers( maxFramesInFlight )
+    , m_vertexDataVersions( maxFramesInFlight, 0 )
+{
+    ...
+}
+```
+
+With that in place, `drawFrame` only copies the vertex data if it's needed:
+```cpp
+// rendering.cpp
+auto Renderer::drawFrame(
+    const SceneData& sceneData,
+    const vk::Queue& queue,
+    const Swapchain::FrameData& frame,
+    const vk::Extent2D& imageExtent
+) -> void
+{
+    ...
+    auto& gpuVertexBuffer = m_vertexBuffers[ frame.frameInFlightIndex ];
+    bool needsUpload = m_vertexDataVersions[ frame.frameInFlightIndex ] != sceneData.vertexDataVersion;
+
+    if ( gpuVertexBuffer.size < sceneData.vertexData.size() )
+    {
+        gpuVertexBuffer = createGPUBuffer(
+            m_physicalDevice,
+            m_logicalDevice,
+            sceneData.vertexData.size(),
+            vk::BufferUsageFlagBits::eVertexBuffer
+        );
+        needsUpload = true;
+    }
+
+    if ( needsUpload )
+    {
+        copyDataToBuffer( m_logicalDevice, sceneData.vertexData, gpuVertexBuffer );
+        m_vertexDataVersions[ frame.frameInFlightIndex ] = sceneData.vertexDataVersion;
+    }
+
+    recordCommandBuffer( ... );
+    ...
+}
+```
+
+A newly created buffer is empty, so it always needs to be filled, no matter which version it's supposed to hold. This also takes care of the very first frame: the stored versions and the version we pass in are both 0, but since all buffers start out with a size of 0, they are created and filled anyway.
+
+The only thing left is to pass a version in `main.cpp`. Since our cube never changes, we can always pass 0:
+```cpp
+// main.cpp
+renderer.drawFrame(
+    vcpp::SceneData{
+        .vertexData = std::as_bytes( std::span{ vertices } ),
+        .vertexCount = vertexCount,
+        .vertexDataVersion = 0,
+        .mvpMatrix = mvp
+    },
+    queue,
+    frame,
+    swapchain->getImageExtent()
+);
+```
+
+Note that I've switched to *designated initializers*, a C++20 feature that lets us name each member we initialize. The members must be listed in the order in which they're declared, and the compiler checks that for us.
+
+Compile and run this version, and the cube should rotate just as before. But now each vertex buffer is only filled once, instead of in every single frame.
+
+
+---
+
+[^1]: For example, we could upload the vertex data only once, in a separate function that waits for the GPU to become idle first. Or we could keep the vertex data in device-local memory, which is faster for the GPU to read, and fill it via a staging buffer, as mentioned in lesson 27. We already used staging buffers for our compute shader in lesson 12, and we'll come back to them for vertex data later in the tutorial.
