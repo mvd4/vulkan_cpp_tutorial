@@ -118,7 +118,7 @@ namespace vcpp
         const vk::Extent2D& renderExtent,
         const vk::Buffer& vertexBuffer,
         const SceneData& sceneData
-    ) -> void
+    ) const -> void
     {
         const auto clearValues = std::array< vk::ClearValue, 2 >{
             vk::ClearValue{}.setColor( std::array< float, 4 >{ { 0.f, 0.f, .5f, 1.f } } ),

@@ -243,7 +243,7 @@ In reality, a surface facing away from every light source is rarely pitch black,
 The math for that is as simple as it gets:
 ```glsl
 vec3 ambient = ambientStrength * lightColor;
-outColor = ambient * objectColor;
+outColor = vec4( ambient * objectColor.rgb, objectColor.a );
 ```
 
 So we need to calculate the color of every fragment by multiplying it by the ambient light term. This seems like a really good use for our push constants, so let's implement an ambient light source that changes color over time for our scene. Since strength and color are both constant for the whole frame, we'll calculate `ambientStrength * lightColor` on the CPU and pass the result to the shader as a single ambient color.
@@ -382,8 +382,28 @@ void main()
 ```
 Here too, we have to make sure we declare the offset of the push constant correctly, but since the fragment shader doesn't use the matrix, it doesn't need to declare it.
 
-Compile and run this version. You'll see that the surfaces of our cube now change color periodically. The red, green, and blue faces of our cube each have a single primary color, so they get almost completely dark whenever the light contains hardly any of that color. Our blue face, for example, turns nearly black while the blue channel of the light is close to zero. The yellow, violet, and turquoise faces, on the other hand, never go completely dark: they each reflect two of the three channels, and at least one of those is always lit.
+Compile and run this version. You'll see that the surfaces of our cube now change color periodically. The red, green, and blue faces of our cube each have a single primary color, so they get almost completely dark whenever the light contains hardly any of that color. Our blue face, for example, turns black when the blue channel of the light drops to zero. The yellow, violet, and turquoise faces, on the other hand, never go completely dark: they each reflect two of the three channels, and at least one of those is always lit.
 
+
+## Finishing touches
+There's one tiny issue that I still want to address before calling it a day: we have to remember to add the two preprocessor `#define`s in every file, before it includes `glm.hpp`. So far this was only one file, so that was okay, but now it's three. This is very error-prone: if we forget to add the defines at one location, we end up with two different definitions of some inline glm functions in different translation units. That's a violation of C++'s *one definition rule* (ODR), and it results in undefined behavior: the linker silently picks one of the definitions, and neither the compiler nor the linker is required to warn us. Let's therefore remove the preprocessor directives from the source files and define them in CMake instead.
+
+While we're at it, we can also get rid of `GLM_FORCE_RADIANS`. GLM has used radians by default since version 0.9.6, so this define doesn't do anything anymore. Only `GLM_FORCE_DEPTH_ZERO_TO_ONE` is still needed:
+```cmake
+...
+target_compile_features( ${TARGET_NAME} PRIVATE cxx_std_20 )
+
+target_compile_definitions( ${TARGET_NAME} PRIVATE GLM_FORCE_DEPTH_ZERO_TO_ONE )
+
+set_target_properties( ${TARGET_NAME} PROPERTIES
+    CXX_EXTENSIONS OFF
+    VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:${TARGET_NAME}>"
+)
+...
+```
+This guarantees that the definition will be set in every translation unit.
+
+And with this we're done for today. Next time we'll improve our lighting model further.
 
 ---
 

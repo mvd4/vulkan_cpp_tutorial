@@ -14,6 +14,9 @@ target_sources( ${TARGET_NAME} PRIVATE presentation.cpp  presentation.hpp )
 target_sources( ${TARGET_NAME} PRIVATE rendering.cpp  rendering.hpp )
 
 target_compile_features( ${TARGET_NAME} PRIVATE cxx_std_20 )
+
+target_compile_definitions( ${TARGET_NAME} PRIVATE GLM_FORCE_DEPTH_ZERO_TO_ONE )
+
 set_target_properties( ${TARGET_NAME} PROPERTIES
     CXX_EXTENSIONS OFF
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:${TARGET_NAME}>"

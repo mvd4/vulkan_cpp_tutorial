@@ -23,8 +23,6 @@ License.
 #include "memory.hpp"
 #include "presentation.hpp"
 
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 
 #include <vulkan/vulkan.hpp>
@@ -82,7 +80,7 @@ namespace vcpp
             const vk::Extent2D& renderExtent,
             const vk::Buffer& vertexBuffer,
             const SceneData& sceneData
-        ) -> void;
+        ) const -> void;
 
         vk::PhysicalDevice m_physicalDevice;
         vk::Device m_logicalDevice;
