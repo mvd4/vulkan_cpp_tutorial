@@ -23,6 +23,10 @@ License.
 #include "memory.hpp"
 #include "presentation.hpp"
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+
 #include <vulkan/vulkan.hpp>
 
 #include <cstddef>
@@ -37,6 +41,7 @@ namespace vcpp
     {
         std::span< const std::byte > vertexData;
         std::uint32_t vertexCount;
+        glm::mat4 mvpMatrix;
     };
 
     class Renderer
@@ -68,6 +73,14 @@ namespace vcpp
         auto getRenderPass() const -> vk::RenderPass { return *m_renderPass; }
 
     private:
+
+        auto recordCommandBuffer(
+            const vk::CommandBuffer& commandBuffer,
+            const vk::Framebuffer& frameBuffer,
+            const vk::Extent2D& renderExtent,
+            const vk::Buffer& vertexBuffer,
+            const SceneData& sceneData
+        ) -> void;
 
         vk::PhysicalDevice m_physicalDevice;
         vk::Device m_logicalDevice;

@@ -21,6 +21,10 @@ License.
 
 #include "presentation.hpp"
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+
 #include <vulkan/vulkan_format_traits.hpp>
 
 #include <array>
@@ -75,7 +79,15 @@ namespace vcpp
 
     auto createGraphicsPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout
     {
-        return logicalDevice.createPipelineLayoutUnique( vk::PipelineLayoutCreateInfo{} );
+        const auto range = vk::PushConstantRange{}
+            .setStageFlags( vk::ShaderStageFlagBits::eVertex )
+            .setOffset( 0 )
+            .setSize( sizeof( glm::mat4 ) );
+
+        const auto info = vk::PipelineLayoutCreateInfo{}
+            .setPushConstantRanges( range );
+
+        return logicalDevice.createPipelineLayoutUnique( info );
     }
 
     auto createComputePipelineLayout(

@@ -218,11 +218,7 @@ auto main() -> int
             rotationAngle = std::fmod( rotationAngle + deltaTime * rotationSpeed, glm::two_pi< float >() );
 
             model = glm::rotate( glm::identity< glm::mat4 >(), rotationAngle, glm::vec3{ 0.f, 1.f, 0.f } );
-
-            for ( std::uint32_t i = 0; i < vertexCount; ++i )
-            {
-                verticesTemp[ i ].position = projection * view * model * vertices[ i ].position;
-            }
+            const auto mvp = projection * view * model;
 
             try
             {
@@ -230,8 +226,9 @@ auto main() -> int
 
                 renderer.drawFrame(
                     vcpp::SceneData{
-                        std::as_bytes( std::span{ verticesTemp } ),
-                        vertexCount
+                        std::as_bytes( std::span{ vertices } ),
+                        vertexCount,
+                        mvp
                     },
                     queue,
                     frame,

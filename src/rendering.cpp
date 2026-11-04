@@ -25,58 +25,6 @@ License.
 #include <cassert>
 
 
-namespace
-{
-    auto recordCommandBuffer(
-        const vk::CommandBuffer& commandBuffer,
-        const vk::Pipeline& pipeline,
-        const vk::RenderPass& renderPass,
-        const vk::Framebuffer& frameBuffer,
-        const vk::Extent2D& renderExtent,
-        const vk::Buffer& vertexBuffer,
-        std::uint32_t vertexCount
-    ) -> void
-    {
-        const auto clearValues = std::array< vk::ClearValue, 2 >{
-            vk::ClearValue{}.setColor( std::array< float, 4 >{ { 0.f, 0.f, .5f, 1.f } } ),
-            vk::ClearValue{}.setDepthStencil( vk::ClearDepthStencilValue{ 1.f, 0 } )
-        };
-
-        const auto renderPassBeginInfo = vk::RenderPassBeginInfo{}
-            .setRenderPass( renderPass )
-            .setFramebuffer( frameBuffer )
-            .setRenderArea( vk::Rect2D{ vk::Offset2D{ 0, 0 }, renderExtent } )
-            .setClearValues( clearValues );
-
-        commandBuffer.begin( vk::CommandBufferBeginInfo{} );
-
-        commandBuffer.beginRenderPass( renderPassBeginInfo, vk::SubpassContents::eInline );
-
-        commandBuffer.bindPipeline( vk::PipelineBindPoint::eGraphics, pipeline );
-
-        const auto viewport = vk::Viewport{}
-            .setX( 0.f )
-            .setY( 0.f )
-            .setWidth( static_cast< float >( renderExtent.width ) )
-            .setHeight( static_cast< float >( renderExtent.height ) )
-            .setMinDepth( 0.f )
-            .setMaxDepth( 1.f );
-        commandBuffer.setViewport( 0, viewport );
-
-        const auto scissor = vk::Rect2D{ { 0, 0 }, renderExtent };
-        commandBuffer.setScissor( 0, scissor );
-
-        commandBuffer.bindVertexBuffers( 0, vertexBuffer, vk::DeviceSize{ 0 } );
-
-        commandBuffer.draw( vertexCount, 1, 0, 0 );
-
-        commandBuffer.endRenderPass();
-
-        commandBuffer.end();
-    }
-}
-
-
 namespace vcpp
 {
     Renderer::Renderer(
@@ -140,12 +88,10 @@ namespace vcpp
 
         recordCommandBuffer(
             m_commandBuffers[ frame.frameInFlightIndex ],
-            *m_pipeline,
-            *m_renderPass,
             frame.framebuffer,
             imageExtent,
             *gpuVertexBuffer.buffer,
-            sceneData.vertexCount
+            sceneData
         );
 
         const vk::PipelineStageFlags waitStages[] = {
@@ -157,5 +103,58 @@ namespace vcpp
             .setWaitDstStageMask( waitStages );
 
         queue.submit( submitInfo, frame.inFlightFence );
+    }
+
+    auto Renderer::recordCommandBuffer(
+        const vk::CommandBuffer& commandBuffer,
+        const vk::Framebuffer& frameBuffer,
+        const vk::Extent2D& renderExtent,
+        const vk::Buffer& vertexBuffer,
+        const SceneData& sceneData
+    ) -> void
+    {
+        const auto clearValues = std::array< vk::ClearValue, 2 >{
+            vk::ClearValue{}.setColor( std::array< float, 4 >{ { 0.f, 0.f, .5f, 1.f } } ),
+            vk::ClearValue{}.setDepthStencil( vk::ClearDepthStencilValue{ 1.f, 0 } )
+        };
+
+        const auto renderPassBeginInfo = vk::RenderPassBeginInfo{}
+            .setRenderPass( *m_renderPass )
+            .setFramebuffer( frameBuffer )
+            .setRenderArea( vk::Rect2D{ vk::Offset2D{ 0, 0 }, renderExtent } )
+            .setClearValues( clearValues );
+
+        commandBuffer.begin( vk::CommandBufferBeginInfo{} );
+
+        commandBuffer.beginRenderPass( renderPassBeginInfo, vk::SubpassContents::eInline );
+
+        commandBuffer.bindPipeline( vk::PipelineBindPoint::eGraphics, *m_pipeline );
+
+        commandBuffer.pushConstants< glm::mat4 >(
+            *m_pipelineLayout,
+            vk::ShaderStageFlagBits::eVertex,
+            0,
+            sceneData.mvpMatrix
+        );
+
+        const auto viewport = vk::Viewport{}
+            .setX( 0.f )
+            .setY( 0.f )
+            .setWidth( static_cast< float >( renderExtent.width ) )
+            .setHeight( static_cast< float >( renderExtent.height ) )
+            .setMinDepth( 0.f )
+            .setMaxDepth( 1.f );
+        commandBuffer.setViewport( 0, viewport );
+
+        const auto scissor = vk::Rect2D{ { 0, 0 }, renderExtent };
+        commandBuffer.setScissor( 0, scissor );
+
+        commandBuffer.bindVertexBuffers( 0, vertexBuffer, vk::DeviceSize{ 0 } );
+
+        commandBuffer.draw( sceneData.vertexCount, 1, 0, 0 );
+
+        commandBuffer.endRenderPass();
+
+        commandBuffer.end();
     }
 }
