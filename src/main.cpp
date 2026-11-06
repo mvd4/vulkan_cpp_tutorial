@@ -30,6 +30,7 @@ License.
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -37,7 +38,9 @@ License.
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <span>
 #include <stdexcept>
+#include <vector>
 
 namespace
 {
@@ -54,6 +57,83 @@ namespace
     {
         windowMinimized = width == 0 || height == 0;
         framebufferSizeChanged = true;
+    }
+
+    auto sphereSurfacePoint( float radius, float phi, float theta ) -> glm::vec3
+    {
+        return radius * glm::vec3{
+            std::sin( phi ) * std::cos( theta ),
+            std::cos( phi ),
+            std::sin( phi ) * std::sin( theta )
+        };
+    }
+
+    auto addTriangle(
+        std::vector< Vertex >& vertices,
+        const glm::vec3& a,
+        const glm::vec3& b,
+        const glm::vec3& c,
+        const glm::vec4& color
+    ) -> void
+    {
+        vertices.push_back( Vertex{ glm::vec4{ a, 1.f }, color } );
+        vertices.push_back( Vertex{ glm::vec4{ b, 1.f }, color } );
+        vertices.push_back( Vertex{ glm::vec4{ c, 1.f }, color } );
+    }
+
+    auto createSphere(
+        float radius,
+        std::uint32_t numStacks,
+        std::uint32_t numSlices,
+        const glm::vec4& color
+    ) -> std::vector< Vertex >
+    {
+        assert( numStacks >= 2 && numSlices >= 3 );
+
+        auto vertices = std::vector< Vertex >{};
+        vertices.reserve( 6u * numStacks * numSlices );
+
+        const auto angleOf = []( std::uint32_t step, std::uint32_t numSteps, float fullAngle ) -> float
+        {
+            return fullAngle * static_cast< float >( step ) / static_cast< float >( numSteps );
+        };
+
+        // sin( π ) and sin( 2π ) aren't exactly 0 in floating point, so we set the bottom pole and
+        // the closing angle of the last slice explicitly to make neighboring triangles share
+        // bit-identical vertices.
+        const auto bottomPole = glm::vec3{ 0.f, -radius, 0.f };
+
+        for ( std::uint32_t stack = 0; stack < numStacks; ++stack )
+        {
+            const auto isFirstStack = stack == 0;
+            const auto isLastStack = stack + 1 == numStacks;
+
+            const auto phiTop = angleOf( stack, numStacks, glm::pi< float >() );
+            const auto phiBottom = angleOf( stack + 1, numStacks, glm::pi< float >() );
+
+            for ( std::uint32_t slice = 0; slice < numSlices; ++slice )
+            {
+                const auto isLastSlice = slice + 1 == numSlices;
+
+                const auto thetaLeft = angleOf( slice, numSlices, glm::two_pi< float >() );
+                const auto thetaRight = isLastSlice ? 0.f : angleOf( slice + 1, numSlices, glm::two_pi< float >() );
+
+                const auto topLeft = sphereSurfacePoint( radius, phiTop, thetaLeft );
+                const auto topRight = sphereSurfacePoint( radius, phiTop, thetaRight );
+                const auto bottomLeft = isLastStack ? bottomPole : sphereSurfacePoint( radius, phiBottom, thetaLeft );
+                const auto bottomRight = isLastStack ? bottomPole : sphereSurfacePoint( radius, phiBottom, thetaRight );
+
+                // At the poles the whole ring collapses into a single point, so one of the two
+                // triangles of those quads would have no area at all.
+                if ( !isFirstStack )
+                    addTriangle( vertices, topLeft, topRight, bottomLeft, color );
+
+                if ( !isLastStack )
+                    addTriangle( vertices, topRight, bottomRight, bottomLeft, color );
+            }
+        }
+
+        return vertices;
     }
 }
 
@@ -96,56 +176,13 @@ auto main() -> int
 
         std::unique_ptr< vcpp::Swapchain > swapchain;
 
-        constexpr size_t vertexCount = 36;
-        const std::array< Vertex, vertexCount > vertices = {
-            // front (red)
-            Vertex{ { -.5f, -.5f,  .5f, 1.f }, { 1.f, 0.f, 0.f, 1.f } },
-            Vertex{ {  .5f, -.5f,  .5f, 1.f }, { 1.f, 0.f, 0.f, 1.f } },
-            Vertex{ { -.5f,  .5f,  .5f, 1.f }, { 1.f, 0.f, 0.f, 1.f } },
-            Vertex{ {  .5f, -.5f,  .5f, 1.f }, { 1.f, 0.f, 0.f, 1.f } },
-            Vertex{ {  .5f,  .5f,  .5f, 1.f }, { 1.f, 0.f, 0.f, 1.f } },
-            Vertex{ { -.5f,  .5f,  .5f, 1.f }, { 1.f, 0.f, 0.f, 1.f } },
+        constexpr auto sphereRadius = .7f;
+        constexpr std::uint32_t numSphereStacks = 24u;
+        constexpr std::uint32_t numSphereSlices = 24u;
+        constexpr auto sphereColor = glm::vec4{ 0.5f, 0.5f, 0.5f, 1.f };
 
-            // back (yellow)
-            Vertex{ { -.5f, -.5f, -.5f, 1.f }, { 1.f, 1.f, 0.f, 1.f } },
-            Vertex{ {  .5f, -.5f, -.5f, 1.f }, { 1.f, 1.f, 0.f, 1.f } },
-            Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 1.f, 1.f, 0.f, 1.f } },
-            Vertex{ {  .5f, -.5f, -.5f, 1.f }, { 1.f, 1.f, 0.f, 1.f } },
-            Vertex{ {  .5f,  .5f, -.5f, 1.f }, { 1.f, 1.f, 0.f, 1.f } },
-            Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 1.f, 1.f, 0.f, 1.f } },
-
-            // left (violet)
-            Vertex{ { -.5f, -.5f,  .5f, 1.f }, { 1.f, 0.f, 1.f, 1.f } },
-            Vertex{ { -.5f, -.5f, -.5f, 1.f }, { 1.f, 0.f, 1.f, 1.f } },
-            Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 1.f, 0.f, 1.f, 1.f } },
-            Vertex{ { -.5f, -.5f,  .5f, 1.f }, { 1.f, 0.f, 1.f, 1.f } },
-            Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 1.f, 0.f, 1.f, 1.f } },
-            Vertex{ { -.5f,  .5f,  .5f, 1.f }, { 1.f, 0.f, 1.f, 1.f } },
-
-            // right (green)
-            Vertex{ {  .5f, -.5f,  .5f, 1.f }, { 0.f, 1.f, 0.f, 1.f } },
-            Vertex{ {  .5f, -.5f, -.5f, 1.f }, { 0.f, 1.f, 0.f, 1.f } },
-            Vertex{ {  .5f,  .5f, -.5f, 1.f }, { 0.f, 1.f, 0.f, 1.f } },
-            Vertex{ {  .5f, -.5f,  .5f, 1.f }, { 0.f, 1.f, 0.f, 1.f } },
-            Vertex{ {  .5f,  .5f, -.5f, 1.f }, { 0.f, 1.f, 0.f, 1.f } },
-            Vertex{ {  .5f,  .5f,  .5f, 1.f }, { 0.f, 1.f, 0.f, 1.f } },
-
-            // top (turquoise)
-            Vertex{ { -.5f, -.5f,  .5f, 1.f }, { 0.f, 1.f, 1.f, 1.f } },
-            Vertex{ {  .5f, -.5f,  .5f, 1.f }, { 0.f, 1.f, 1.f, 1.f } },
-            Vertex{ {  .5f, -.5f, -.5f, 1.f }, { 0.f, 1.f, 1.f, 1.f } },
-            Vertex{ { -.5f, -.5f,  .5f, 1.f }, { 0.f, 1.f, 1.f, 1.f } },
-            Vertex{ {  .5f, -.5f, -.5f, 1.f }, { 0.f, 1.f, 1.f, 1.f } },
-            Vertex{ { -.5f, -.5f, -.5f, 1.f }, { 0.f, 1.f, 1.f, 1.f } },
-
-            // bottom (blue)
-            Vertex{ { -.5f,  .5f,  .5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
-            Vertex{ {  .5f,  .5f,  .5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
-            Vertex{ {  .5f,  .5f, -.5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
-            Vertex{ { -.5f,  .5f,  .5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
-            Vertex{ {  .5f,  .5f, -.5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
-            Vertex{ { -.5f,  .5f, -.5f, 1.f }, { 0.f, 0.f, 1.f, 1.f } },
-        };
+        const auto vertices = createSphere( sphereRadius, numSphereStacks, numSphereSlices, sphereColor );
+        const auto vertexCount = static_cast< std::uint32_t >( vertices.size() );
 
         auto renderer = vcpp::Renderer{
             physicalDevice,
