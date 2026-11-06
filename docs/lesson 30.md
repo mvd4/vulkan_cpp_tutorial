@@ -68,7 +68,7 @@ auto createSphere(
     // bit-identical vertices.
     const auto bottomPole = glm::vec3{ 0.f, -radius, 0.f };
 
-    for ( std::uint32_t stack = 0; stack < numStacks; ++stack )
+    for ( auto stack = std::uint32_t{ 0 }; stack < numStacks; ++stack )
     {
         const auto isFirstStack = stack == 0;
         const auto isLastStack = stack + 1 == numStacks;
@@ -76,7 +76,7 @@ auto createSphere(
         const auto phiTop = angleOf( stack, numStacks, glm::pi< float >() );
         const auto phiBottom = angleOf( stack + 1, numStacks, glm::pi< float >() );
 
-        for ( std::uint32_t slice = 0; slice < numSlices; ++slice )
+        for ( auto slice = std::uint32_t{ 0 }; slice < numSlices; ++slice )
         {
             const auto isLastSlice = slice + 1 == numSlices;
 
@@ -112,8 +112,8 @@ We've already made our rendering pipeline able to handle any (or even a changing
 // main.cpp
 ...
 constexpr auto sphereRadius = .7f;
-constexpr std::uint32_t numSphereStacks = 24u;
-constexpr std::uint32_t numSphereSlices = 24u;
+constexpr auto numSphereStacks = std::uint32_t{ 24 };
+constexpr auto numSphereSlices = std::uint32_t{ 24 };
 constexpr auto sphereColor = glm::vec4{ 0.5f, 0.5f, 0.5f, 1.f };
 
 const auto vertices = createSphere( sphereRadius, numSphereStacks, numSphereSlices, sphereColor );
@@ -395,7 +395,7 @@ That's it for today. Thanks for reading, I hope you enjoyed it.
 ---
 
 [^1]: A latitude/longitude sphere like ours is the easiest one to derive, but it isn't the only option, and it does have the drawback that its triangles come out wildly uneven in size: tiny slivers crowding around the poles, comparatively huge ones at the equator. The common alternative is an icosphere, built by starting from an icosahedron and repeatedly subdividing each of its triangles into four. That gives you an almost uniform distribution of triangles over the whole surface and no poles to special-case, at the cost of less obvious code - which is why we're not building one here.
-[^2]: The GPU's rasterization rules guarantee that two triangles sharing an edge leave no gap between them, but only if the shared vertices are bit-for-bit identical. Floating-point math doesn't give us that for free: `std::sin( glm::two_pi< float >() )` is about `-1.7e-7`, not 0, so the vertices along the seam at `theta = 2π` would end up slightly off from the ones at `theta = 0`. The same happens at the bottom pole. The deviations are tiny, but they can occasionally show up as single-pixel holes along the seam. Using `0` as the closing angle of the last slice and setting the bottom pole explicitly removes the problem. The top pole doesn't need this, because `sin( 0 )` is exactly 0.
+[^2]: The GPU's rasterization rules guarantee that two triangles sharing an edge leave no gap between them, but only if the shared vertices are bit-for-bit identical. Floating-point math doesn't give us that for free: `std::sin( glm::two_pi< float >() )` is about `1.7e-7`, not 0, so the vertices along the seam at `theta = 2π` would end up slightly off from the ones at `theta = 0`. The same happens at the bottom pole. The deviations are tiny, but they can occasionally show up as single-pixel holes along the seam. Using `0` as the closing angle of the last slice and setting the bottom pole explicitly removes the problem. The top pole doesn't need this, because `sin( 0 )` is exactly 0.
 [^3]: In that case, we could keep the normals as they are and transform the light direction into each object's space instead. That's cheap, but less intuitive, and it has to be redone for every object.
 [^4]: I'm not going into the mathematical explanation here. If you're interested in the details, please refer to [the Lighthouse3D tutorial on the normal matrix](https://www.lighthouse3d.com/tutorials/glsl-12-tutorial/the-normal-matrix/).
 [^5]: For the normal matrix we only need the upper-left 3x3 part of the model matrix, which is then inverted and transposed. However, passing a `mat3` to the GLSL shaders is tricky, because they'd use a different memory layout: in a push constant block each of the three columns gets padded up to 16 bytes, so a `mat3` takes 48 bytes on the shader side while `glm::mat3` is only 36 bytes. Rather than juggling manual padding, we accept wasting a few bytes, convert it back to a `mat4`, and pass that.

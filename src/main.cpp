@@ -112,7 +112,7 @@ namespace
         // bit-identical vertices.
         const auto bottomPole = glm::vec3{ 0.f, -radius, 0.f };
 
-        for ( std::uint32_t stack = 0; stack < numStacks; ++stack )
+        for ( auto stack = std::uint32_t{ 0 }; stack < numStacks; ++stack )
         {
             const auto isFirstStack = stack == 0;
             const auto isLastStack = stack + 1 == numStacks;
@@ -120,7 +120,7 @@ namespace
             const auto phiTop = angleOf( stack, numStacks, glm::pi< float >() );
             const auto phiBottom = angleOf( stack + 1, numStacks, glm::pi< float >() );
 
-            for ( std::uint32_t slice = 0; slice < numSlices; ++slice )
+            for ( auto slice = std::uint32_t{ 0 }; slice < numSlices; ++slice )
             {
                 const auto isLastSlice = slice + 1 == numSlices;
 
@@ -181,8 +181,8 @@ auto main() -> int
         std::unique_ptr< vcpp::Swapchain > swapchain;
 
         constexpr auto sphereRadius = .7f;
-        constexpr std::uint32_t numSphereStacks = 24u;
-        constexpr std::uint32_t numSphereSlices = 24u;
+        constexpr auto numSphereStacks = std::uint32_t{ 24 };
+        constexpr auto numSphereSlices = std::uint32_t{ 24 };
         constexpr auto sphereColor = glm::vec4{ 0.5f, 0.5f, 0.5f, 1.f };
 
         const auto vertices = createSphere( sphereRadius, numSphereStacks, numSphereSlices, sphereColor );
