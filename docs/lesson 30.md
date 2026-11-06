@@ -308,6 +308,90 @@ Now we can pass our normal matrix as part of `SceneData` from main.
 
 If you run this version, you'll likely notice two things: the validation layers report an error, and the disc still changes color. That's because while we've modified our application code to push the normal matrix through the pipeline to the shaders, we did not update the shaders themselves yet. The fragment shader still declares the ambient color push constant at offset 64, but the pipeline layout no longer assigns any push constant memory to the fragment stage - that's what the validation layers complain about. The fragment shader now reads data that isn't meant for it. What exactly you see depends on your driver: on many GPUs, push constants are stored in one shared block, so the shader reads the first column of our normal matrix and the disc changes color in sync with the rotation. On others, you might get a static or black disc. Officially, this is undefined behavior, which is why the validation layers complain.
 
+## Implementing the Lambert term
+So let's first adapt our vertex shader to work with the changed push constant layout:
+
+```glsl
+// vertex.vert
+...
+layout( push_constant ) uniform PushConstants
+{
+    mat4 mvp;
+    mat4 normalMatrix;
+} pushConstants;
+...
+```
+
+Now, for the Lambert term, we need to calculate the dot product of the vertex normal and the normalized direction vector from the vertex to the light source. We have the vertex normal available in our vertex shader now, but we don't have the direction to the light source yet. In a real-world 3D engine, the light sources would be part of the scene description, and the light direction would be passed into the shader. For our tutorial purposes though, we'll take the shortcut that we already used when we initially drew our triangle and define the direction to the light source directly in the vertex shader:
+
+```glsl
+const vec3 lightDirection = normalize( vec3( 1.0, 0.0, 2.0 ) );
+```
+This simulates a distant light source sitting in front of the sphere and a bit to the right - about 27 degrees off the viewing axis. Feel free to play with these numbers later.
+
+Next we need to transform the vertex normal using the normal matrix:
+
+```glsl
+vec3 worldNormal = normalize( mat3( pushConstants.normalMatrix ) * inNormal.xyz );
+```
+I called the variable `worldNormal`, because it's the normal transformed to world space. One important detail is that we only need the upper-left 3x3 part of the normal matrix: we only widened it to a `mat4` because of the memory layout, and the translation part is irrelevant for directions anyway. The rest should be pretty straightforward. We normalize the result because the normal matrix does not generally preserve vector lengths, and an unnormalized normal would make the Lambert term come out too bright or too dark.
+
+With these two vectors in place, we can now calculate the diffuse light component for that vertex and pass it on to the fragment shader. So our new vertex shader implementation looks like this:
+
+```glsl
+#version 450
+
+layout( location = 0 ) in vec4 inPosition;
+layout( location = 1 ) in vec4 inColor;
+layout( location = 2 ) in vec4 inNormal;
+
+layout( location = 0 ) out vec4 outColor;
+layout( location = 1 ) out float outDiffuse;
+
+layout( push_constant ) uniform PushConstants
+{
+    mat4 mvp;
+    mat4 normalMatrix;
+} pushConstants;
+
+// Direction from the surface towards a fixed directional light, in world space.
+const vec3 lightDirection = normalize( vec3( 1.0, 0.0, 2.0 ) );
+
+void main()
+{
+    gl_Position = pushConstants.mvp * inPosition;
+
+    vec3 worldNormal = normalize( mat3( pushConstants.normalMatrix ) * inNormal.xyz );
+    outDiffuse = max( dot( worldNormal, lightDirection ), 0.0 );
+
+    outColor = inColor;
+}
+```
+
+The rasterizer interpolates that `outDiffuse` value across each triangle for us. In our case, that interpolation doesn't actually change anything: all three vertices of a triangle share the same normal, so they all get the same diffuse value, and interpolating between three identical values yields that very value for every fragment. So all the fragment shader has left to do is scale the surface color by the light that reached it:
+
+```glsl
+#version 450
+
+layout( location = 0 ) in vec4 inColor;
+layout( location = 1 ) in float inDiffuse;
+
+layout( location = 0 ) out vec4 outColor;
+
+void main()
+{
+    vec3 lighting = vec3( inDiffuse );
+    outColor = vec4( inColor.rgb * lighting, inColor.a );
+}
+```
+
+The `lighting` variable looks like a pointless detour right now - it holds nothing but `inDiffuse` in all three components. I'm keeping it because it is the slot where the other terms of the lighting equation will be summed up in the coming lessons, and it's easier to follow if the structure is already there.
+
+Compile and run this. You should see that our sphere finally looks like a three-dimensional object again. It's not exactly a sphere though, more like a disco ball. That's something we'll be addressing in the upcoming tutorials. Still, I think this is already much more impressive than our cube. So for now, lean back and enjoy what we've achieved.
+
+That's it for today. Thanks for reading, I hope you enjoyed it.
+
+
 ---
 
 [^1]: A latitude/longitude sphere like ours is the easiest one to derive, but it isn't the only option, and it does have the drawback that its triangles come out wildly uneven in size: tiny slivers crowding around the poles, comparatively huge ones at the equator. The common alternative is an icosphere, built by starting from an icosahedron and repeatedly subdividing each of its triangles into four. That gives you an almost uniform distribution of triangles over the whole surface and no poles to special-case, at the cost of less obvious code - which is why we're not building one here.
