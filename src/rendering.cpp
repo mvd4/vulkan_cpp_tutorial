@@ -144,11 +144,11 @@ namespace vcpp
             sceneData.mvpMatrix
         );
 
-        commandBuffer.pushConstants< glm::vec4 >(
+        commandBuffer.pushConstants< glm::mat4 >(
             *m_pipelineLayout,
-            vk::ShaderStageFlagBits::eFragment,
+            vk::ShaderStageFlagBits::eVertex,
             sizeof( glm::mat4 ),
-            sceneData.ambientColor
+            sceneData.normalMatrix
         );
 
         const auto viewport = vk::Viewport{}

@@ -51,6 +51,13 @@ namespace
     {
         glm::vec4 position;
         glm::vec4 color;
+        glm::vec4 normal;
+    };
+
+    constexpr auto vertexFormats = std::array< vk::Format, 3 >{
+        vk::Format::eR32G32B32A32Sfloat,    // position
+        vk::Format::eR32G32B32A32Sfloat,    // color
+        vk::Format::eR32G32B32A32Sfloat,    // normal
     };
 
     void onFramebufferSizeChanged( [[maybe_unused]] GLFWwindow* window, int width, int height )
@@ -76,9 +83,11 @@ namespace
         const glm::vec4& color
     ) -> void
     {
-        vertices.push_back( Vertex{ glm::vec4{ a, 1.f }, color } );
-        vertices.push_back( Vertex{ glm::vec4{ b, 1.f }, color } );
-        vertices.push_back( Vertex{ glm::vec4{ c, 1.f }, color } );
+        const auto normal = glm::vec4{ glm::normalize( glm::cross( b - a, c - a ) ), 0.f };
+
+        vertices.push_back( Vertex{ glm::vec4{ a, 1.f }, color, normal } );
+        vertices.push_back( Vertex{ glm::vec4{ b, 1.f }, color, normal } );
+        vertices.push_back( Vertex{ glm::vec4{ c, 1.f }, color, normal } );
     }
 
     auto createSphere(
@@ -169,11 +178,6 @@ auto main() -> int
 
         const auto queue = logicalDevice->getQueue( logicalDevice.queueFamilyIndex, 0 );
 
-        constexpr auto vertexFormats = std::array< vk::Format, 2 >{
-            vk::Format::eR32G32B32A32Sfloat,
-            vk::Format::eR32G32B32A32Sfloat,
-        };
-
         std::unique_ptr< vcpp::Swapchain > swapchain;
 
         constexpr auto sphereRadius = .7f;
@@ -201,9 +205,6 @@ auto main() -> int
 
         float rotationAngle = 0.f;
         constexpr float rotationSpeed = glm::radians( 45.f );
-
-        float ambientColorPhase = 0.f;
-        constexpr float twoThirdsPi = glm::radians( 120.f );
 
         auto lastFrameTime = std::chrono::steady_clock::now();
 
@@ -255,15 +256,9 @@ auto main() -> int
             rotationAngle = std::fmod( rotationAngle + deltaTime * rotationSpeed, glm::two_pi< float >() );
 
             model = glm::rotate( glm::identity< glm::mat4 >(), rotationAngle, glm::vec3{ 0.f, 1.f, 0.f } );
-            const auto mvp = projection * view * model;
 
-            ambientColorPhase = std::fmod( ambientColorPhase + deltaTime, glm::two_pi< float >() );
-            const auto ambientColor = glm::vec4{
-                0.5f + 0.5f * std::sin( ambientColorPhase ),
-                0.5f + 0.5f * std::sin( ambientColorPhase + twoThirdsPi ),
-                0.5f + 0.5f * std::sin( ambientColorPhase + 2.f * twoThirdsPi ),
-                1.f
-            };
+            const auto mvp = projection * view * model;
+            const auto normalMatrix = glm::mat4{ glm::transpose( glm::inverse( glm::mat3{ model } ) ) };
 
             try
             {
@@ -275,7 +270,7 @@ auto main() -> int
                         .vertexCount = vertexCount,
                         .vertexDataVersion = 0,
                         .mvpMatrix = mvp,
-                        .ambientColor = ambientColor
+                        .normalMatrix = normalMatrix
                     },
                     queue,
                     frame,

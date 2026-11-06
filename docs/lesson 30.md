@@ -153,8 +153,166 @@ For L, that means we'll use a *directional light*: a light source so far away - 
 
 Let's implement this for our sphere.
 
+## Vertex normals
+First of all, we need the normals. Since our pipeline operates on vertices or fragments, not on surfaces, we add a normal vector to each vertex. That's the standard way of doing it, and it has advantages for the more sophisticated lighting models we'll get to later.
+
+```cpp
+// main.cpp
+...
+struct Vertex
+{
+    glm::vec4 position;
+    glm::vec4 color;
+    glm::vec4 normal;
+};
+
+constexpr auto vertexFormats = std::array< vk::Format, 3 >{
+    vk::Format::eR32G32B32A32Sfloat,    // position
+    vk::Format::eR32G32B32A32Sfloat,    // color
+    vk::Format::eR32G32B32A32Sfloat,    // normal
+};
+...
+```
+
+Now we actually have to generate the normals for our sphere surfaces. Luckily this is quite straightforward. You might remember from your math lessons that the cross product of two vectors always produces a vector that is perpendicular to both. In other words, it points in the direction of the normal of the plane spanned by the two vectors. Two edges of a triangle - `b - a` and `c - a` - span exactly the plane the triangle lies in, so all we need to do is calculate their cross product when we add a triangle:
+
+```cpp
+// main.cpp
+auto addTriangle(
+    std::vector< Vertex >& vertices,
+    const glm::vec3& a,
+    const glm::vec3& b,
+    const glm::vec3& c,
+    const glm::vec4& color
+) -> void
+{
+    const auto normal = glm::vec4{ glm::normalize( glm::cross( b - a, c - a ) ), 0.f };
+
+    vertices.push_back( Vertex{ glm::vec4{ a, 1.f }, color, normal } );
+    vertices.push_back( Vertex{ glm::vec4{ b, 1.f }, color, normal } );
+    vertices.push_back( Vertex{ glm::vec4{ c, 1.f }, color, normal } );
+}
+```
+
+Note that we set the normal's `w` component to 0: a normal is a direction, not a position, and with `w = 0` the translation part of a 4x4 transformation matrix has no effect on it.
+
+The order of the three corners decides which way that normal ends up pointing. If you swap any two of them, it flips to face the other way (rotating all three, i.e. `a, b, c` → `b, c, a`, doesn't change it, though). We want the normal to point outwards, away from the center of the sphere, which means the corners have to be ordered counter-clockwise when seen from outside the sphere. Luckily, `createSphere` already passes them in that order, so there's nothing to change there.
+
+Remember the degenerate triangles at the poles that we skipped earlier? Now it turns out that skipping them isn't just tidier, it's necessary: we'd end up with one edge being a zero vector, and thus the cross product would become zero as well. Normalizing a zero vector divides by zero, and we'd end up with NaN normals.
+
+Now we can access the new normals in the vertex shader:
+
+```glsl
+#version 450
+
+layout( location = 0 ) in vec4 inPosition;
+layout( location = 1 ) in vec4 inColor;
+layout( location = 2 ) in vec4 inNormal;
+
+layout( location = 0 ) out vec4 outColor;
+
+...
+```
+
+We could use the normal in the shader right away; everything else in the pipeline is already set up. There's a problem though: our sphere rotates, and with it so should the normals. Otherwise the lighting would rotate along with the sphere, as if it were painted on. We moved transformation of the vertices to the GPU in the last lesson, so now we need to transform the normals there too.
+
+## The normal matrix
+When doing these lighting calculations, there's one rule we absolutely have to obey: the normals and the light direction need to be in the _same_ coordinate space, otherwise the dot product doesn't make sense. Which space we pick is ultimately up to us: we could use object space[^3], world space, or view space. We'll go with world space here, as this is the most straightforward way to do it and also the one I find most natural to think in. That means we apply the model transformation to the normals, but neither the view nor the projection matrix.
+
+Unfortunately, applying the model matrix to the normals isn't always correct: if an object is scaled non-uniformly, e.g. stretched along one axis, normals transformed with the same matrix are no longer perpendicular to the surface. We don't do any non-uniform scaling here, so we could get away with using the model matrix as-is. However, it doesn't cost us much to implement the proper solution, so let's pass a dedicated transformation matrix for the normals. This is the so-called *normal matrix*, which is calculated as the inverse transpose of the upper-left 3x3 part of the model matrix[^4]:
+
+```text
+normalMatrix = transpose( inverse( mat3( model ) ) );
+```
+
+Each normal needs to be multiplied by this matrix before calculating the Lambert term. Since there's one normal per vertex, we'll do that in the vertex shader. But first we create the normal matrix[^5]:
+
+```cpp
+// main.cpp
+...
+model = glm::rotate( glm::identity< glm::mat4 >(), rotationAngle, glm::vec3{ 0.f, 1.f, 0.f } );
+
+const auto mvp = projection * view * model;
+const auto normalMatrix = glm::mat4{ glm::transpose( glm::inverse( glm::mat3{ model } ) ) };
+...
+```
+
+That leaves us in an uncomfortably tight spot though. The Vulkan specification only guarantees 128 bytes of push constant space[^6] - many GPUs offer more, but we cannot rely on it. Two `mat4` matrices already consume exactly those 128 bytes, leaving nothing for the ambient color vector. Even if we did pack the normal matrix as a padded `mat3`, we'd land at 64 + 48 + 16 = 128 bytes: it would technically fit, but with precisely zero bytes to spare, and the next thing we want to send to the GPU would break it again. So push constants are evidently not the proper long-term solution for this kind of information. We'll get to that soon. For now, let's remove the push constant for the ambient color again and give the two matrices the whole budget - we'll bring ambient light back once we have a better mechanism for it.
+
+So, we remove the calculation of the ambient color from the render loop in `main()` (together with the `ambientColorPhase` and `twoThirdsPi` variables), modify `SceneData` to hold the normal matrix instead of the ambient color, change the pipeline layout to accept two matrices, and set the modified push constants in `recordCommandBuffer`:
+
+```cpp
+// rendering.hpp
+struct SceneData
+{
+    std::span< const std::byte > vertexData;
+    std::uint32_t vertexCount;
+    std::uint32_t vertexDataVersion;
+    glm::mat4 mvpMatrix;
+    glm::mat4 normalMatrix;
+};
+```
+
+```cpp
+// pipelines.cpp
+auto createGraphicsPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout
+{
+    const auto ranges = std::array< vk::PushConstantRange, 1 >{
+        vk::PushConstantRange{}
+            .setStageFlags( vk::ShaderStageFlagBits::eVertex )
+            .setOffset( 0 )
+            .setSize( 2 * sizeof( glm::mat4 ) )   // mvp + normalMatrix
+    };
+
+    const auto info = vk::PipelineLayoutCreateInfo{}
+        .setPushConstantRanges( ranges );
+
+    return logicalDevice.createPipelineLayoutUnique( info );
+}
+```
+
+```cpp
+// rendering.cpp
+auto Renderer::recordCommandBuffer(
+    const vk::CommandBuffer& commandBuffer,
+    const vk::Framebuffer& frameBuffer,
+    const vk::Extent2D& renderExtent,
+    const vk::Buffer& vertexBuffer,
+    const SceneData& sceneData
+) const -> void
+{
+    ...
+
+    commandBuffer.bindPipeline( vk::PipelineBindPoint::eGraphics, *m_pipeline );
+
+    commandBuffer.pushConstants< glm::mat4 >(
+        *m_pipelineLayout,
+        vk::ShaderStageFlagBits::eVertex,
+        0,
+        sceneData.mvpMatrix
+    );
+
+    commandBuffer.pushConstants< glm::mat4 >(
+        *m_pipelineLayout,
+        vk::ShaderStageFlagBits::eVertex,
+        sizeof( glm::mat4 ),
+        sceneData.normalMatrix
+    );
+
+    const auto viewport = vk::Viewport{}
+    ...
+}
+```
+
+Now we can pass our normal matrix as part of `SceneData` from main.
+
+If you run this version, you'll likely notice two things: the validation layers report an error, and the disc still changes color. That's because while we've modified our application code to push the normal matrix through the pipeline to the shaders, we did not update the shaders themselves yet. The fragment shader still declares the ambient color push constant at offset 64, but the pipeline layout no longer assigns any push constant memory to the fragment stage - that's what the validation layers complain about. The fragment shader now reads data that isn't meant for it. What exactly you see depends on your driver: on many GPUs, push constants are stored in one shared block, so the shader reads the first column of our normal matrix and the disc changes color in sync with the rotation. On others, you might get a static or black disc. Officially, this is undefined behavior, which is why the validation layers complain.
+
 ---
 
 [^1]: A latitude/longitude sphere like ours is the easiest one to derive, but it isn't the only option, and it does have the drawback that its triangles come out wildly uneven in size: tiny slivers crowding around the poles, comparatively huge ones at the equator. The common alternative is an icosphere, built by starting from an icosahedron and repeatedly subdividing each of its triangles into four. That gives you an almost uniform distribution of triangles over the whole surface and no poles to special-case, at the cost of less obvious code - which is why we're not building one here.
-
 [^2]: The GPU's rasterization rules guarantee that two triangles sharing an edge leave no gap between them, but only if the shared vertices are bit-for-bit identical. Floating-point math doesn't give us that for free: `std::sin( glm::two_pi< float >() )` is about `-1.7e-7`, not 0, so the vertices along the seam at `theta = 2π` would end up slightly off from the ones at `theta = 0`. The same happens at the bottom pole. The deviations are tiny, but they can occasionally show up as single-pixel holes along the seam. Using `0` as the closing angle of the last slice and setting the bottom pole explicitly removes the problem. The top pole doesn't need this, because `sin( 0 )` is exactly 0.
+[^3]: In that case, we could keep the normals as they are and transform the light direction into each object's space instead. That's cheap, but less intuitive, and it has to be redone for every object.
+[^4]: I'm not going into the mathematical explanation here. If you're interested in the details, please refer to [the Lighthouse3D tutorial on the normal matrix](https://www.lighthouse3d.com/tutorials/glsl-12-tutorial/the-normal-matrix/).
+[^5]: For the normal matrix we only need the upper-left 3x3 part of the model matrix, which is then inverted and transposed. However, passing a `mat3` to the GLSL shaders is tricky, because they'd use a different memory layout: in a push constant block each of the three columns gets padded up to 16 bytes, so a `mat3` takes 48 bytes on the shader side while `glm::mat3` is only 36 bytes. Rather than juggling manual padding, we accept wasting a few bytes, convert it back to a `mat4`, and pass that.
+[^6]: The limit is called `maxPushConstantsSize`. 128 bytes is the minimum a conformant implementation has to provide; you can query the actual value of your device via `physicalDevice.getProperties().limits.maxPushConstantsSize`.

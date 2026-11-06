@@ -77,15 +77,11 @@ namespace vcpp
 
     auto createGraphicsPipelineLayout( const vk::Device& logicalDevice ) -> vk::UniquePipelineLayout
     {
-        const auto ranges = std::array< vk::PushConstantRange, 2 >{
+        const auto ranges = std::array< vk::PushConstantRange, 1 >{
             vk::PushConstantRange{}
                 .setStageFlags( vk::ShaderStageFlagBits::eVertex )
                 .setOffset( 0 )
-                .setSize( sizeof( glm::mat4 ) ),
-            vk::PushConstantRange{}
-                .setStageFlags( vk::ShaderStageFlagBits::eFragment )
-                .setOffset( sizeof( glm::mat4 ) )
-                .setSize( sizeof( glm::vec4 ) ),
+                .setSize( 2 * sizeof( glm::mat4 ) )   // mvp + normalMatrix
         };
 
         const auto info = vk::PipelineLayoutCreateInfo{}
