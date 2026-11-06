@@ -123,6 +123,36 @@ const auto vertexCount = static_cast< std::uint32_t >( vertices.size() );
 
 Compile and run this, and you'll see that the cube has been replaced by a pulsating, color-changing disc. I chose a neutral gray so that the effect of the lighting will be easy to see. As described at the beginning, ambient light alone gives the eye no clue about the orientation of a surface, so the sphere can't be told apart from a flat disc. That's what I want to change now.
 
+## Diffuse shading
+In the real world, a surface's orientation relative to the light source(s) matters a lot. A face turned toward a light catches more of it; a face turned away catches less. These differences in brightness are what our eyes rely on to perceive shape and depth.
+
+Many everyday surfaces - paper, chalk, unfinished wood - are matte: when light hits them, they scatter it back out roughly equally in all directions rather than reflecting it like a mirror. This is called diffuse reflection, and it has a convenient consequence: how bright such a surface appears depends only on how much light reaches it, not on where we happen to be looking from. And for a given light, the amount a surface receives depends on its orientation relative to that light.
+
+Mathematically, we can simulate diffuse reflection by calculating the dot product of two normalized vectors: the surface normal **N**, and the light direction **L**, which points from the surface toward the light source. For normalized vectors, the dot product equals the cosine of the angle between them, and that's exactly how the received light falls off: the further a surface tilts away from the light, the larger the area the same amount of light is spread over. If N and L point in exactly the same direction, the dot product is 1 and the light contributes fully. If they are perpendicular, the result is 0, and this particular light source doesn't light the surface at all.
+
+![Three visualizations outlining the effect of different orientations of a 2D plane and its normal relative to a light source](images/Diffuse_Shading.png "Fig. 1: Diffuse shading")
+
+If the normal points more than 90° away from the light direction, the dot product becomes negative. A surface can't receive negative light, though, so we clamp the result to 0. That gives us the formula for the diffuse component:
+
+```text
+diffuse = max( dot( N, L ), 0 )
+```
+
+This is known as the *Lambert term*. In the classic Phong reflection model, it's the second of three components: ambient, diffuse, and specular.
+
+On its own, the Lambert term is just a factor between 0 and 1 that tells us how strongly a surface is lit. To get the actual diffuse light, we multiply it by the light's color, and then multiply the result by the surface color - just like we did with the ambient term in the last lesson:
+
+```glsl
+vec3 diffuse = max( dot( N, L ), 0.0 ) * lightColor;
+outColor = vec4( ( ambient + diffuse ) * objectColor.rgb, objectColor.a );
+```
+
+One decision we have to make now is _where_ in the pipeline we want to evaluate that formula. We have two candidates: the vertex shader, which runs once per vertex, or the fragment shader, which runs once per fragment (roughly, once per pixel covered by a triangle). Looking at the Lambert term, this only makes a difference if N or L vary across a triangle. In more advanced lighting systems they do, but we'll start with the simple case and assume that both are constant for each triangle.
+
+For L, that means we'll use a *directional light*: a light source so far away - like the sun - that its light hits every point of the scene from the same direction. For N, it means that each triangle gets one single normal. This is known as *flat shading*, and it means that each triangle will be lit uniformly and end up with a single color. So for now, we can evaluate the formula in the vertex shader.
+
+Let's implement this for our sphere.
+
 ---
 
 [^1]: A latitude/longitude sphere like ours is the easiest one to derive, but it isn't the only option, and it does have the drawback that its triangles come out wildly uneven in size: tiny slivers crowding around the poles, comparatively huge ones at the equator. The common alternative is an icosphere, built by starting from an icosahedron and repeatedly subdividing each of its triangles into four. That gives you an almost uniform distribution of triangles over the whole surface and no poles to special-case, at the cost of less obvious code - which is why we're not building one here.
